@@ -1,0 +1,84 @@
+// MediaCom Licensing API — Prisma schema
+// Production datasource is PostgreSQL (Supabase/Neon). See README for local dev notes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  company   String?
+  email     String   @unique
+  phone     String?
+  createdAt DateTime @default(now())
+
+  licenses License[]
+
+  @@index([email])
+}
+
+enum LicenseType {
+  perpetual
+  subscription
+}
+
+enum LicenseStatus {
+  active
+  revoked
+  expired
+}
+
+model License {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  // SHA-256 hash of the raw activation key. The raw key is shown to the admin
+  // exactly once at creation time and is NEVER stored anywhere.
+  keyHash String
+
+  type   LicenseType   @default(perpetual)
+  status LicenseStatus @default(active)
+
+  deviceLimit Int       @default(1)
+  expiresAt   DateTime? // null = perpetual, never expires
+
+  // Entitlements — see src/constants/tiers.ts for the shape and named presets.
+  features Json
+
+  issuedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  devices Device[]
+
+  @@index([customerId])
+  @@index([keyHash])
+}
+
+model Device {
+  id         String   @id @default(cuid())
+  licenseId  String
+  license    License  @relation(fields: [licenseId], references: [id])
+  fingerprint String
+  activatedAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  label       String?
+
+  @@unique([licenseId, fingerprint])
+  @@index([licenseId])
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+}
