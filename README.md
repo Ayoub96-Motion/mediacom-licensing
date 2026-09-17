@@ -184,6 +184,29 @@ npm run dev      # tsx watch, for local development
 npm run build && npm start   # compiled, for production
 ```
 
+### 6. Issue a real license without a dashboard yet
+
+There's no admin dashboard UI built yet. Until there is, `scripts/issue-license.ts`
+is a stand-in — it exercises the admin API end-to-end (login, find-or-create
+customer, issue a license) and prints the raw key so you have something real
+to test against the desktop app's activation screen:
+
+```
+ADMIN_EMAIL=you@mediacom.com ADMIN_PASSWORD=changeme \
+  npm run issue-license -- --email=test@studio.com --name="Studio Nova" --tier=starter
+```
+
+Args: `--email`, `--name`, `--company`, `--tier` (`starter`/`studio`/`enterprise`,
+default `starter`), `--deviceLimit` (default 1), `--type` (`perpetual`/
+`subscription`, default `perpetual`). Any you omit fall back to the `DEFAULTS`
+object at the top of the script, which you can edit directly instead of typing
+args every time. If `ADMIN_EMAIL`/`ADMIN_PASSWORD` aren't set, it prompts for
+them interactively (unmasked — this is a local dev tool, not for shared
+terminals). It targets `LICENSING_API_URL` (default
+`http://localhost:$PORT`) — override it if your API runs elsewhere.
+Re-running with the same `--email` reuses the existing customer rather than
+creating a duplicate.
+
 ## This was tested against a real local Postgres
 
 Local development in this walkthrough used a real Postgres 16 instance

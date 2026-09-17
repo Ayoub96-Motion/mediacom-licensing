@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "generate-keypair": "tsx scripts/generate-keypair.ts",
+    "issue-license": "tsx scripts/issue-license.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
