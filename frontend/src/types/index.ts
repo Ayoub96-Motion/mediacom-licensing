@@ -119,9 +119,17 @@ export type AuditAction =
   | "device.deactivate"
   // Phase 1 device API actions — actorType 'device', no admin.
   | "device.activate"
-  | "device.refresh";
+  | "device.refresh"
+  // Phase 3 release management actions.
+  | "release.upload"
+  | "release.update"
+  | "release.publish"
+  | "release.unpublish"
+  | "release.delete"
+  // actorType 'customer', no admin — logged from the portal download endpoint.
+  | "release.download";
 
-export type AuditTargetType = "License" | "Customer" | "Device";
+export type AuditTargetType = "License" | "Customer" | "Device" | "Release";
 export type AuditActorType = "admin" | "customer" | "device";
 
 export interface AuditLogEntry {
@@ -136,6 +144,33 @@ export interface AuditLogEntry {
   targetId: string;
   metadata: Record<string, unknown> | null;
   createdAt: string;
+}
+
+// Phase 3: release management. product uses the API's dashed spelling
+// (server-win) — the backend's src/utils/releaseProduct.ts translates
+// to/from Prisma's internal underscored enum value before this ever leaves
+// the API.
+export type ReleaseProduct = "server-win" | "android" | "ios";
+export type ReleaseChannel = "stable" | "beta";
+
+export interface Release {
+  id: string;
+  product: ReleaseProduct;
+  version: string;
+  channel: ReleaseChannel;
+  // Only set for an uploaded file (server-win). Null for a link-only
+  // android/ios entry.
+  fileSize: number | null;
+  sha256: string | null;
+  // Only set for a link-only android/ios entry. Null for an uploaded file.
+  externalUrl: string | null;
+  notes: string | null;
+  minPlanCode: TierPresetName | null;
+  isPublished: boolean;
+  publishedAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DashboardStats {

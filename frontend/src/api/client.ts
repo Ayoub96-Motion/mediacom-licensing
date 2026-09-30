@@ -7,6 +7,13 @@ if (!BASE_URL) {
   throw new Error("VITE_API_BASE_URL is not set — copy .env.example to .env and fill it in");
 }
 
+// Exposed for callers that can't go through apiRequest() — currently only
+// the release upload (multipart/form-data with a progress callback, which
+// needs XMLHttpRequest, not fetch) in api/releases.ts.
+export function getBaseUrl(): string {
+  return BASE_URL;
+}
+
 const TOKEN_STORAGE_KEY = "mediacom_admin_token";
 
 let inMemoryToken: string | null = localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -44,7 +51,7 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
   auth?: boolean; // default true
 }

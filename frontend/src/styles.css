@@ -130,8 +130,13 @@ tr.muted { opacity: 0.55; }
 .badge.subscription { background: #fef3c7; color: #92400e; }
 .badge.expiring-soon { background: #fef3c7; color: #92400e; }
 .badge.deactivated { background: #f3f4f6; color: #6b7280; }
+.badge.stable { background: #dcfce7; color: #166534; }
+.badge.beta { background: #fef3c7; color: #92400e; }
 
 .expiry-warning { color: #92400e; font-weight: 600; }
+
+.progress-bar { height: 8px; border-radius: 99px; background: #e5e7eb; overflow: hidden; margin: 12px 0; }
+.progress-bar-fill { height: 100%; background: #4f46e5; transition: width 0.2s ease; }
 
 .stat-banner {
   background: #fffbeb; border: 1px solid #fde68a; color: #92400e;

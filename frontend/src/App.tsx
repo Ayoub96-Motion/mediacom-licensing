@@ -9,6 +9,7 @@ import { CustomerDetailPage } from "./pages/CustomerDetailPage";
 import { LicensesPage } from "./pages/LicensesPage";
 import { LicenseDetailPage } from "./pages/LicenseDetailPage";
 import { ActivityPage } from "./pages/ActivityPage";
+import { ReleasesPage } from "./pages/ReleasesPage";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
               <Route path="/customers/:id" element={<CustomerDetailPage />} />
               <Route path="/licenses" element={<LicensesPage />} />
               <Route path="/licenses/:id" element={<LicenseDetailPage />} />
+              <Route path="/releases" element={<ReleasesPage />} />
               <Route path="/activity" element={<ActivityPage />} />
             </Route>
           </Route>
