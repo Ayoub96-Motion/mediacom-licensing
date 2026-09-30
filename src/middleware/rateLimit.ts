@@ -1,6 +1,14 @@
 import rateLimit from "express-rate-limit";
 import { errorBody } from "../lib/errors";
 
+// Configurable so the regression script (scripts/test-licensing.js) can run
+// its full, legitimate 12-call /activate sequence on staging without
+// tripping the same limiter its own --rate-limit case is trying to test —
+// without that, the two things fight each other every run. Production
+// keeps the spec'd default (10/15min) unless explicitly overridden.
+const DEVICE_ACTIVATE_RATE_LIMIT = Number(process.env.DEVICE_ACTIVATE_RATE_LIMIT ?? 10);
+const DEVICE_ACTIVATE_RATE_WINDOW_MS = Number(process.env.DEVICE_ACTIVATE_RATE_WINDOW_MS ?? 15 * 60 * 1000);
+
 // Public license endpoints (/activate, /validate) are called directly by
 // customer desktop installs with no auth — rate-limit per IP to blunt abuse.
 export const publicLicenseRateLimit = rateLimit({
@@ -10,5 +18,21 @@ export const publicLicenseRateLimit = rateLimit({
   legacyHeaders: false,
   handler: (_req, res) => {
     res.status(429).json(errorBody("rate_limited", "Too many requests, please try again later"));
+  },
+});
+
+// Phase 1 device API: 10 req / 15 min per IP on /activate specifically (per
+// spec) — tighter than the legacy limiter above since activation is the
+// highest-value target for abuse (each attempt is a guess against the
+// keyspace). /refresh and /deactivate use publicLicenseRateLimit above
+// instead — not separately specified, but leaving them fully unthrottled
+// would be an odd gap.
+export const deviceActivateRateLimit = rateLimit({
+  windowMs: DEVICE_ACTIVATE_RATE_WINDOW_MS,
+  limit: DEVICE_ACTIVATE_RATE_LIMIT,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json(errorBody("rate_limited", "Too many activation attempts, please try again later"));
   },
 });
