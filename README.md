@@ -113,9 +113,14 @@ beyond an Ed25519 verify function.
     licenseId, customerId, type, expiresAt, status, features,
     deviceFingerprint, issuedAt, tokenExpiresAt
   },
+  payloadRaw: "<exact JSON string that was signed>",
   signature: "<hex>"
 }
 ```
+
+Verifiers should check `signature` against `payloadRaw` (the exact bytes that were
+signed), not a re-serialization of `payload` — that avoids depending on
+JSON.stringify reproducing identical key order across a network hop.
 
 `tokenExpiresAt` is 30 days out from `issuedAt` — this is the offline grace
 period the desktop app should trust before it must call `/validate` again.
@@ -263,6 +268,19 @@ curl "http://localhost:3000/admin/customers?q=nova" -H "Authorization: Bearer $T
 ```
 curl http://localhost:3000/admin/customers/$CUSTOMER_ID -H "Authorization: Bearer $TOKEN"
 ```
+Response items from `GET /admin/customers` also include `licenseCount` (added for the admin dashboard's customer list — not present on `GET /admin/customers/:id`, which includes the full `licenses` array instead).
+
+**`GET /admin/customers/:id/devices`** — every device across all of this customer's licenses in one call, each annotated with which license it belongs to (`license: {id, type, status}`).
+```
+curl http://localhost:3000/admin/customers/$CUSTOMER_ID/devices -H "Authorization: Bearer $TOKEN"
+```
+
+**`PATCH /admin/customers/:id`**
+```
+curl -X PATCH http://localhost:3000/admin/customers/$CUSTOMER_ID \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"phone":"555-0199"}'
+```
 
 **`POST /admin/licenses`** (preset tier)
 ```
@@ -282,6 +300,20 @@ curl -X POST http://localhost:3000/admin/licenses \
 **`GET /admin/licenses?status=active&type=perpetual`**
 ```
 curl "http://localhost:3000/admin/licenses?status=active" -H "Authorization: Bearer $TOKEN"
+```
+
+**Expiry filtering** — two ways to query it, combinable:
+- `status=expiring_soon` — a computed shorthand, not a real `LicenseStatus` stored anywhere. Expands to `status=active AND expiresAt` within `expiringWithinDays` (default 30 when this shorthand is used alone).
+- `expiringWithinDays=N` — independently filters to `expiresAt IS NOT NULL AND expiresAt` between now and N days out. Can be combined with a real `status` value too, e.g. `status=active&expiringWithinDays=7`.
+```
+curl "http://localhost:3000/admin/licenses?status=expiring_soon" -H "Authorization: Bearer $TOKEN"
+curl "http://localhost:3000/admin/licenses?expiringWithinDays=7&type=subscription" -H "Authorization: Bearer $TOKEN"
+```
+
+**`GET /admin/licenses/expiring-soon?withinDays=30`** — a summary count for a dashboard widget, not a list. `withinDays` defaults to 30.
+```
+curl "http://localhost:3000/admin/licenses/expiring-soon" -H "Authorization: Bearer $TOKEN"
+# {"count": 3, "withinDays": 30}
 ```
 
 **`GET /admin/licenses/:id`**
@@ -304,6 +336,54 @@ curl -X POST http://localhost:3000/admin/licenses/$LICENSE_ID/revoke -H "Authori
 **`DELETE /admin/licenses/:id/devices/:deviceId`** (frees a seat)
 ```
 curl -X DELETE http://localhost:3000/admin/licenses/$LICENSE_ID/devices/$DEVICE_ID -H "Authorization: Bearer $TOKEN"
+```
+
+## Dashboard overview stats
+
+**`GET /admin/stats`** — one aggregate endpoint for the dashboard's Overview
+page, not five separate round trips. At current (and any realistic
+near-term) data volume this is five cheap `COUNT`s plus one indexed
+audit-log query, run concurrently — composing it from existing endpoints
+client-side would just mean more requests for no real benefit. Reuses the
+same expiry-window logic as `GET /admin/licenses/expiring-soon` and the
+same query as the audit-log endpoints — nothing here is reimplemented.
+```
+curl http://localhost:3000/admin/stats -H "Authorization: Bearer $TOKEN"
+```
+```json
+{
+  "totalCustomers": 12,
+  "totalLicenses": 34,
+  "licensesByStatus": { "active": 28, "revoked": 4, "expired": 2 },
+  "licensesExpiringSoon": 3,
+  "recentActivity": [ /* last 10 AuditLog entries, same shape as GET /admin/audit-log — the
+                          human-readable summary is a client-side concern, formatted by the
+                          same code the per-record Activity views use, not duplicated here */ ]
+}
+```
+
+## Audit log
+
+Every mutating admin action (`customer.create`, `customer.update`,
+`license.create`, `license.update`, `license.revoke`, `device.deactivate`)
+is recorded in the `AuditLog` table via `logAction()` (`src/utils/auditLog.ts`)
+— who (from the authenticated JWT's `sub`, not a new identification path),
+what, when, and a `{before, after}` diff for updates. **A logging failure
+never blocks the real request** — `logAction()` catches its own errors and
+only logs them server-side.
+
+**`GET /admin/audit-log`** (global, filterable)
+```
+curl "http://localhost:3000/admin/audit-log?targetType=License&page=1" -H "Authorization: Bearer $TOKEN"
+```
+Query params: `targetType` (`License`/`Customer`/`Device`), `targetId`, `adminId`, `from`/`to` (ISO datetimes), `page`, `pageSize`.
+
+**`GET /admin/customers/:id/audit-log`** and **`GET /admin/licenses/:id/audit-log`** — the
+same thing, pre-scoped to one record. The license-scoped one also includes
+`device.deactivate` entries for that license's devices (those target a
+`Device`, not the `License`, but belong in its history).
+```
+curl http://localhost:3000/admin/licenses/$LICENSE_ID/audit-log -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Verified end-to-end locally
@@ -333,6 +413,15 @@ real output (not simulated):
 `EmailProvider` interface and currently just logs to the console. To wire
 up Resend or Postmark, implement `EmailProvider.send()` against their API
 and swap the `ConsoleEmailProvider` instantiation — no call sites change.
+
+## Admin dashboard
+
+`frontend/` is a React + TypeScript + Vite admin dashboard for this API —
+customers, licenses, issuing/revoking, device management. See
+`frontend/README.md` for setup. It required two small additive backend
+changes (documented there and in the endpoint list above): `licenseCount`
+on `GET /admin/customers` list items, and a new `PATCH
+/admin/customers/:id` (didn't exist before).
 
 ## Subscription support (designed, not built)
 

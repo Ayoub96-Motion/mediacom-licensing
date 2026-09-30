@@ -21,14 +21,20 @@ export interface LicenseTokenPayload {
 
 export interface SignedLicenseToken {
   payload: LicenseTokenPayload;
-  signature: string; // hex-encoded Ed25519 signature over the JSON-encoded payload
+  signature: string; // hex-encoded Ed25519 signature over payloadRaw
+  // The exact byte string that was signed. Verifiers should check the
+  // signature against this, not a re-serialization of `payload` — relying
+  // on JSON.stringify to reproduce identical key order/formatting across
+  // a network hop and a JSON round-trip is fragile; payloadRaw removes
+  // that assumption entirely.
+  payloadRaw: string;
 }
 
 function getSecretKey(): Uint8Array {
   return new Uint8Array(Buffer.from(env.licenseSigningPrivateKey, "base64"));
 }
 
-function canonicalize(payload: LicenseTokenPayload): Uint8Array {
+function canonicalize(payload: LicenseTokenPayload): string {
   // Stable key order so the signature is deterministic and verifiable
   // by any implementation that reconstructs the same JSON.
   const ordered = {
@@ -42,7 +48,7 @@ function canonicalize(payload: LicenseTokenPayload): Uint8Array {
     issuedAt: payload.issuedAt,
     tokenExpiresAt: payload.tokenExpiresAt,
   };
-  return new TextEncoder().encode(JSON.stringify(ordered));
+  return JSON.stringify(ordered);
 }
 
 export function signLicenseToken(
@@ -55,18 +61,19 @@ export function signLicenseToken(
     tokenExpiresAt: new Date(now.getTime() + TOKEN_VALIDITY_MS).toISOString(),
   };
 
-  const message = canonicalize(payload);
-  const signature = ed.sign(message, getSecretKey());
+  const payloadRaw = canonicalize(payload);
+  const signature = ed.sign(new TextEncoder().encode(payloadRaw), getSecretKey());
 
   return {
     payload,
+    payloadRaw,
     signature: Buffer.from(signature).toString("hex"),
   };
 }
 
 /** For completeness / server-side self-checks. The desktop app verifies with the public key, offline. */
 export function verifyLicenseToken(token: SignedLicenseToken): boolean {
-  const message = canonicalize(token.payload);
+  const message = new TextEncoder().encode(token.payloadRaw);
   const publicKey = ed.getPublicKey(getSecretKey());
   return ed.verify(Buffer.from(token.signature, "hex"), message, publicKey);
 }
