@@ -98,6 +98,48 @@ export const updateLicenseSchema = z.object({
   type: z.enum(["perpetual", "subscription"]).optional(),
 });
 
+// ── Phase 3: releases ─────────────────────────────────────────────────────────
+// Multipart text fields always arrive as strings, hence z.coerce/z.enum on
+// raw strings rather than the typed unions used elsewhere for JSON bodies.
+export const uploadReleaseSchema = z.object({
+  product: z.enum(["server-win", "android", "ios"]),
+  version: z.string().min(1),
+  channel: z.enum(["stable", "beta"]).default("stable"),
+  notes: z.string().optional(),
+  minPlanCode: z.enum(["starter", "studio", "enterprise"]).optional(),
+  // Required for android/ios (link-only, no file); must be absent for
+  // server-win (which uploads a file instead) — cross-field check happens in
+  // the route, since it also depends on whether a file was actually attached.
+  externalUrl: z.string().url().optional(),
+});
+
+export const updateReleaseSchema = z.object({
+  channel: z.enum(["stable", "beta"]).optional(),
+  notes: z.string().nullable().optional(),
+  minPlanCode: z.enum(["starter", "studio", "enterprise"]).nullable().optional(),
+  isPublished: z.boolean().optional(),
+});
+
+export const listReleasesQuerySchema = z.object({
+  product: z.enum(["server-win", "android", "ios"]).optional(),
+  channel: z.enum(["stable", "beta"]).optional(),
+  isPublished: z.coerce.boolean().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(20),
+});
+
+// Portal auth is stubbed (see src/middleware/portalAuth.ts) — the raw
+// license key stands in for a real session until Phase 4's portal auth
+// exists.
+export const portalReleasesQuerySchema = z.object({
+  licenseKey: z.string().min(1),
+  product: z.enum(["server-win", "android", "ios"]).optional(),
+});
+
+export const portalDownloadQuerySchema = z.object({
+  token: z.string().min(1),
+});
+
 export const listAuditLogQuerySchema = z.object({
   targetType: z.enum(["License", "Customer", "Device"]).optional(),
   targetId: z.string().optional(),

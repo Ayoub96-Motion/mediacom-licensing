@@ -10,9 +10,17 @@ export type AuditAction =
   | "device.deactivate"
   // Phase 1 device API actions — actorType 'device', no adminId.
   | "device.activate"
-  | "device.refresh";
+  | "device.refresh"
+  // Phase 3 release management actions.
+  | "release.upload"
+  | "release.update"
+  | "release.publish"
+  | "release.unpublish"
+  | "release.delete"
+  // actorType 'customer', no adminId — logged from the portal download endpoint.
+  | "release.download";
 
-export type AuditTargetType = "License" | "Customer" | "Device";
+export type AuditTargetType = "License" | "Customer" | "Device" | "Release";
 export type AuditActorType = "admin" | "customer" | "device";
 
 interface LogActionParams {
