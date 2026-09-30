@@ -22,3 +22,9 @@ prisma/dev.db-journal
 *.pem
 *_private_key*
 *private-key*
+
+# Defensive: catches uploaded release installers ever landing inside the repo
+# by mistake (RELEASES_STORAGE_DIR is meant to point outside it entirely,
+# same reasoning as the private key above) — these are large binaries with no
+# business in git history.
+/releases-storage/
