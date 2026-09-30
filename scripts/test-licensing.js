@@ -67,6 +67,47 @@ async function apiFetch(path, { method = "GET", body, token } = {}) {
   return { status: res.status, body: json };
 }
 
+// ── Release upload (multipart) ────────────────────────────────────────────────
+// Separate from apiFetch() above, which always sends JSON — global
+// FormData/Blob (Node 18+) let fetch build a real multipart body without any
+// extra dependency. Field order matters: the server's multer filename()
+// callback needs `product`/`version` already parsed by the time the `file`
+// part streams in, so text fields are appended before `file` — see
+// src/routes/adminReleases.ts's comment on this.
+async function uploadReleaseFile(fields, fileBytes, filename, token) {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) form.append(key, value);
+  }
+  if (fileBytes) form.append("file", new Blob([fileBytes]), filename);
+  const res = await fetch(`${BASE_URL}/admin/releases`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  let json = {};
+  try {
+    json = await res.json();
+  } catch {}
+  return { status: res.status, body: json };
+}
+
+// ── Expired download token (standalone HS256 JWT, mirrors
+//    src/services/releaseDownload.ts's jsonwebtoken usage) — crafted by hand
+//    rather than importing jsonwebtoken, to prove the server-side verify
+//    actually rejects an expired `exp` claim rather than relying on a real
+//    10-minute wait in a test run. ────────────────────────────────────────────
+function craftExpiredDownloadToken(payload) {
+  const secret = process.env.RELEASE_DOWNLOAD_SECRET;
+  if (!secret) throw new Error("RELEASE_DOWNLOAD_SECRET not set");
+  const header = { alg: "HS256", typ: "JWT" };
+  const body = { ...payload, iat: Math.floor(Date.now() / 1000) - 3600, exp: Math.floor(Date.now() / 1000) - 1800 };
+  const encode = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64url");
+  const signingInput = `${encode(header)}.${encode(body)}`;
+  const signature = crypto.createHmac("sha256", secret).update(signingInput).digest("base64url");
+  return `${signingInput}.${signature}`;
+}
+
 // ── Token verification (standalone reimplementation, mirrors
 //    src/services/licenseSigner.ts's verifyLicense() — deliberately not
 //    importing the app's TS module, to keep this script dependency-free) ──
@@ -340,6 +381,83 @@ async function main() {
     assert(res.body.error?.code === "LICENSE_EXPIRED", `expected LICENSE_EXPIRED, got ${res.body.error?.code}`);
   });
 
+  console.log("\n--- Cases 13-18: release management (Phase 3) ---");
+
+  // Fresh license for the portal-facing cases below — licenseM (used in
+  // cases 1-4, 6-9) is already revoked by case 9 at this point in the run,
+  // which would make it useless as a stand-in for an active customer.
+  const licenseRel = await createLicense({ tier: "starter" });
+  console.log(`License Rel (release cases): ${licenseRel.id}`);
+
+  const createdReleaseIds = [];
+  const releaseVersion = `13.${stamp}`;
+  const fakeInstallerBytes = crypto.randomBytes(1024); // small — this script only needs a real byte stream, not a realistic installer size
+
+  let releaseId;
+
+  await test("13. upload release -> 201, sha256 matches computed hash", async () => {
+    const expectedSha256 = crypto.createHash("sha256").update(fakeInstallerBytes).digest("hex");
+    const res = await uploadReleaseFile(
+      { product: "server-win", version: releaseVersion, channel: "beta", notes: "regression test upload" },
+      fakeInstallerBytes,
+      "regression-test.exe",
+      adminToken
+    );
+    assert(res.status === 201, `expected 201, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.sha256 === expectedSha256, `sha256 mismatch: got ${res.body.sha256}`);
+    assert(res.body.isPublished === false, "a newly uploaded release must start unpublished");
+    releaseId = res.body.id;
+    createdReleaseIds.push(releaseId);
+  });
+
+  await test("14. duplicate (product, version) -> 409 DUPLICATE_VERSION", async () => {
+    const res = await uploadReleaseFile(
+      { product: "server-win", version: releaseVersion, channel: "stable" },
+      fakeInstallerBytes,
+      "regression-test-2.exe",
+      adminToken
+    );
+    assert(res.status === 409, `expected 409, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.error?.code === "DUPLICATE_VERSION", `expected DUPLICATE_VERSION, got ${res.body.error?.code}`);
+  });
+
+  await test("15. unpublished release -> not visible on GET /api/portal/releases", async () => {
+    const res = await apiFetch(`/api/portal/releases?licenseKey=${encodeURIComponent(licenseRel.rawKey)}`);
+    assert(res.status === 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    const found = res.body.items.find((r) => r.id === releaseId);
+    assert(!found, "unpublished release must not appear in the portal listing");
+  });
+
+  await test("16. publish release -> visible on GET /api/portal/releases with a downloadUrl", async () => {
+    const publishRes = await apiFetch(`/admin/releases/${releaseId}`, {
+      method: "PUT",
+      token: adminToken,
+      body: { isPublished: true },
+    });
+    assert(publishRes.status === 200, `publish failed: ${JSON.stringify(publishRes.body)}`);
+
+    const res = await apiFetch(`/api/portal/releases?licenseKey=${encodeURIComponent(licenseRel.rawKey)}`);
+    const found = res.body.items.find((r) => r.id === releaseId);
+    assert(!!found, "published release must appear in the portal listing");
+    assert(typeof found.downloadUrl === "string" && found.downloadUrl.includes("token="), "expected a signed downloadUrl");
+  });
+
+  await test("17. download via the signed token -> 200, byte-for-byte match", async () => {
+    const listRes = await apiFetch(`/api/portal/releases?licenseKey=${encodeURIComponent(licenseRel.rawKey)}`);
+    const found = listRes.body.items.find((r) => r.id === releaseId);
+    const downloadRes = await fetch(`${BASE_URL}${found.downloadUrl}`);
+    assert(downloadRes.status === 200, `expected 200, got ${downloadRes.status}`);
+    const downloaded = Buffer.from(await downloadRes.arrayBuffer());
+    assert(downloaded.equals(fakeInstallerBytes), "downloaded bytes do not match the uploaded file");
+  });
+
+  await test("18. expired download token -> 403 TOKEN_INVALID", async () => {
+    const expiredToken = craftExpiredDownloadToken({ releaseId, licenseId: licenseRel.id });
+    const res = await apiFetch(`/api/portal/releases/${releaseId}/download?token=${expiredToken}`);
+    assert(res.status === 403, `expected 403, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.error?.code === "TOKEN_INVALID", `expected TOKEN_INVALID, got ${res.body.error?.code}`);
+  });
+
   if (RUN_RATE_LIMIT) {
     console.log("\n--- Optional: rate limit (--rate-limit) ---");
     // Reads the SAME env var the server's rateLimit.ts reads (both processes
@@ -366,6 +484,15 @@ async function main() {
   }
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
+  console.log("\n--- Cleanup: unpublishing + deleting releases created by this run ---");
+  for (const id of createdReleaseIds) {
+    // DELETE rejects a published release — unpublish first, unconditionally
+    // (a no-op PUT if it's already unpublished), then delete.
+    await apiFetch(`/admin/releases/${id}`, { method: "PUT", token: adminToken, body: { isPublished: false } });
+    const res = await apiFetch(`/admin/releases/${id}`, { method: "DELETE", token: adminToken });
+    console.log(`  deleted release ${id}: ${res.status === 204 ? "ok" : "FAILED - " + JSON.stringify(res.body)}`);
+  }
+
   console.log("\n--- Cleanup: revoking all licenses created by this run ---");
   for (const id of createdLicenseIds) {
     const res = await apiFetch(`/admin/licenses/${id}/revoke`, { method: "POST", token: adminToken });
