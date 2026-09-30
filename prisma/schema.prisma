@@ -135,6 +135,72 @@ model AdminUser {
   createdAt    DateTime @default(now())
 
   auditLogs AuditLog[]
+  releases  Release[]
+}
+
+// @map preserves the exact dashed string values the app/API use
+// ("server-win", not "server_win") — Prisma enum identifiers can't contain
+// dashes, but the underlying DB/JSON representation can.
+enum ReleaseProduct {
+  server_win @map("server-win")
+  android
+  ios
+}
+
+enum ReleaseChannel {
+  stable
+  beta
+}
+
+// Phase 3 — release management (prerequisite for the customer portal's
+// Downloads page). Two shapes coexist in one table rather than two:
+//   - server-win: an uploaded installer file. storageKey/fileSize/sha256 are
+//     set, externalUrl is null.
+//   - android/ios: link-only (app store / Play Store URL) per the task spec
+//     ("Mobile app entries are link-only: store URL, no file upload").
+//     externalUrl is set, storageKey/fileSize/sha256 are null.
+// Enforced at the application layer (src/routes/adminReleases.ts), not by a
+// DB constraint — Prisma/MySQL has no portable partial-CHECK for "exactly
+// one of A or B" that's worth the complexity here.
+model Release {
+  id String @id @default(cuid())
+
+  product ReleaseProduct
+  version String // semver, e.g. "1.4.2" — uniqueness is per-product, not global
+  channel ReleaseChannel @default(stable)
+
+  // Local-disk storage key (a relative path under RELEASES_STORAGE_DIR) —
+  // see src/lib/releaseStorage.ts. No object storage (S3/R2) is configured
+  // for this project yet (confirmed 2026-09-30 — Namecheap shared hosting,
+  // no bucket credentials anywhere); this field is intentionally storage-
+  // backend-agnostic in name so swapping to a remote key later doesn't need
+  // a schema change, just a different releaseStorage.ts implementation.
+  storageKey String?
+  fileSize   Int? // bytes
+  sha256     String? @db.Char(64)
+
+  // android/ios only — see the model comment above.
+  externalUrl String?
+
+  notes String? @db.Text
+
+  // Same convention as License.planCode: validated against the tier preset
+  // names in src/constants/tiers.ts at the application layer, not a FK. Null
+  // = no plan restriction, every active license can see/download this
+  // release. See src/constants/tiers.ts's meetsMinPlan().
+  minPlanCode String?
+
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+
+  createdBy      String
+  createdByAdmin AdminUser @relation(fields: [createdBy], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([product, version])
+  @@index([product, channel, isPublished])
 }
 
 enum AuditActorType {
