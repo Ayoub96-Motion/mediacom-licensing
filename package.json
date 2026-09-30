@@ -8,11 +8,13 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "generate-keypair": "tsx scripts/generate-keypair.ts",
+    "generate-signing-keys": "tsx scripts/generate-signing-keys.ts",
     "issue-license": "tsx scripts/issue-license.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
+    "test:licensing": "node scripts/test-licensing.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
