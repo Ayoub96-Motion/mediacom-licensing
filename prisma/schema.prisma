@@ -1,12 +1,14 @@
 // MediaCom Licensing API — Prisma schema
-// Production datasource is PostgreSQL (Supabase/Neon). See README for local dev notes.
+// Production datasource is MySQL/MariaDB (Namecheap shared hosting via cPanel's
+// Node.js App feature, which provisions MySQL/MariaDB databases, not standalone
+// Postgres). See README for local dev notes.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -39,9 +41,24 @@ model License {
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id])
 
-  // SHA-256 hash of the raw activation key. The raw key is shown to the admin
-  // exactly once at creation time and is NEVER stored anywhere.
-  keyHash String
+  // HMAC-SHA256(rawKey, LICENSE_KEY_PEPPER), hex — Phase 1 switches from plain
+  // SHA-256 to a peppered HMAC. No dual-lookup/legacy support: existing rows'
+  // hashes go stale against the new lookup and are being reissued on staging
+  // per the 2026-09-30 decision. @unique added — verified zero collisions
+  // across all 17 existing rows before adding this constraint.
+  keyHash String @unique @db.Char(64)
+
+  // AES-256-GCM ciphertext of the raw key (LICENSE_KEY_ENC_KEY), for later
+  // admin-portal "reveal key" display. Nullable: existing rows predate this
+  // and have nothing to decrypt to until reissued.
+  keyEncrypted String? @db.Text
+
+  // Validated against the tier presets in src/constants/tiers.ts at the
+  // application layer — intentionally NOT a FK to a plans table (explicit
+  // 2026-09-30 decision to keep presets as code constants). "custom" means
+  // `features` below was hand-set rather than expanded from a preset.
+  // Nullable: existing rows predate this field.
+  planCode String?
 
   type   LicenseType   @default(perpetual)
   status LicenseStatus @default(active)
@@ -49,7 +66,9 @@ model License {
   deviceLimit Int       @default(1)
   expiresAt   DateTime? // null = perpetual, never expires
 
-  // Entitlements — see src/constants/tiers.ts for the shape and named presets.
+  // Entitlements snapshot taken at issue time — this already served the role
+  // the task spec calls "entitlements JSON"; not duplicating it under a
+  // second field name. See src/constants/tiers.ts for the shape/presets.
   features Json
 
   issuedAt  DateTime @default(now())
@@ -59,20 +78,53 @@ model License {
   devices Device[]
 
   @@index([customerId])
-  @@index([keyHash])
 }
 
+// Kept as "Device" (not renamed to "Activation") — the task spec's new
+// "activations" table is the same concept this already models, and a full
+// rename would ripple through the admin dashboard's API/frontend (device
+// list endpoints, AuditLog action names, etc.) for no functional gain in
+// this phase. Extended in place instead.
 model Device {
-  id         String   @id @default(cuid())
-  licenseId  String
-  license    License  @relation(fields: [licenseId], references: [id])
-  fingerprint String
+  id        String  @id @default(cuid())
+  licenseId String
+  license   License @relation(fields: [licenseId], references: [id])
+
+  // DEPRECATED: raw fingerprint, kept only because the legacy /activate and
+  // /validate shim (Step 3) still reads/writes it. Nullable because rows
+  // created by the NEW /api/device/* endpoints never populate this — they
+  // store only fingerprintHash, per the "fingerprint arrives raw, store only
+  // the hash" decision. Drop once the shim is retired.
+  fingerprint String?
+
+  // SHA-256(fingerprint + FINGERPRINT_SALT), hex — what the new /api/device/*
+  // endpoints look up by. Nullable/unique-with-nulls: existing rows predate
+  // this (MySQL unique indexes allow multiple NULLs, so this coexists fine
+  // with the legacy `fingerprint` unique constraint below during the
+  // transition).
+  fingerprintHash String? @db.Char(64)
+
+  machineName String?
+  appVersion  String?
+
   activatedAt DateTime @default(now())
   lastSeenAt  DateTime @default(now())
-  label       String?
+
+  // Soft-delete for the NEW device API's /deactivate and the new
+  // POST /api/admin/activations/:id/deactivate (Step 4). The EXISTING admin
+  // dashboard's DELETE /admin/licenses/:id/devices/:deviceId keeps its
+  // current hard-delete behavior unchanged in this phase — already tested,
+  // not touching it mid-flight. The two mechanisms coexist: a hard-deleted
+  // row is just gone; a soft-deactivated one has deactivatedAt set and is
+  // filtered out of "active device" counts/lookups by the new code path.
+  deactivatedAt DateTime?
+
+  label String?
 
   @@unique([licenseId, fingerprint])
+  @@unique([licenseId, fingerprintHash])
   @@index([licenseId])
+  @@index([licenseId, deactivatedAt])
 }
 
 model AdminUser {
@@ -81,4 +133,45 @@ model AdminUser {
   passwordHash String
   name         String
   createdAt    DateTime @default(now())
+
+  auditLogs AuditLog[]
+}
+
+enum AuditActorType {
+  admin
+  customer
+  device
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  // Nullable: a device/customer-originated entry (the new device API in
+  // Step 3 will log its own actions here) has no AdminUser to attribute to.
+  // Was required + FK before this phase — every existing row is a real admin
+  // action, so this is a widening change, not a data migration.
+  adminId String?
+  admin   AdminUser? @relation(fields: [adminId], references: [id])
+
+  // Defaults to 'admin' so every existing logAction() call site (all of
+  // which are admin routes) keeps working unchanged — only new device/
+  // customer call sites need to pass this explicitly.
+  actorType AuditActorType @default(admin)
+
+  // e.g. "license.create", "license.revoke", "license.update",
+  // "customer.create", "customer.update", "device.deactivate"
+  action String
+
+  targetType String // "License" | "Customer" | "Device"
+  targetId   String
+
+  // Snapshot of what changed — {before, after} for updates, relevant
+  // details for creates/revokes/deactivates. Never the raw license key.
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }
