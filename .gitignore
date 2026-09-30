@@ -3,6 +3,22 @@ dist/
 *.log
 .env
 .env.local
+.env.staging
+.env.production
+.env.*.local
 .DS_Store
 prisma/dev.db
 prisma/dev.db-journal
+/backups/
+
+# Root-level DB dumps (e.g. a stray mysqldump saved outside backups/) — the
+# leading "/" anchors this to the repo root only, so it does NOT touch
+# prisma/migrations/**/migration.sql, which must stay tracked.
+/*.sql
+
+# Defensive: catches an Ed25519 private key ever generated INTO the repo by
+# mistake (LICENSE_PRIVATE_KEY_PATH is meant to point outside it entirely —
+# see scripts/generate-signing-keys.ts and scripts/generate-keypair.ts).
+*.pem
+*_private_key*
+*private-key*
