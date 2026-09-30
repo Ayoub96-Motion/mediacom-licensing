@@ -34,4 +34,14 @@ export const env = {
   licenseKeyPepper: process.env.LICENSE_KEY_PEPPER,
   licenseKeyEncKey: process.env.LICENSE_KEY_ENC_KEY,
   fingerprintSalt: process.env.FINGERPRINT_SALT,
+
+  // Phase 3 (release management) — local-disk storage for uploaded
+  // installers (no object storage configured for this project — see
+  // prisma/schema.prisma's Release model comment). Also lazily validated at
+  // point of use (src/lib/releaseStorage.ts, src/services/releaseDownload.ts),
+  // same reasoning as the Phase 1 vars above.
+  releasesStorageDir: process.env.RELEASES_STORAGE_DIR,
+  releaseDownloadSecret: process.env.RELEASE_DOWNLOAD_SECRET,
+  releaseDownloadTtlMinutes: Number(process.env.RELEASE_DOWNLOAD_TTL_MINUTES ?? 10),
+  releaseMaxUploadSizeMb: Number(process.env.RELEASE_MAX_UPLOAD_SIZE_MB ?? 500),
 };
