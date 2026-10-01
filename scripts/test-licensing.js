@@ -52,9 +52,14 @@ async function getAdminCredentials() {
 }
 
 // ── Generic API fetch ────────────────────────────────────────────────────────
-async function apiFetch(path, { method = "GET", body, token } = {}) {
+async function apiFetch(path, { method = "GET", body, token, cookie } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
+  // Portal session cookie (Phase 4) — Node's fetch has no cookie jar across
+  // calls the way a browser does, so callers that need a session capture
+  // the Set-Cookie from /api/portal/auth/verify's response themselves
+  // (see res.headers below) and pass it back in on later calls.
+  if (cookie) headers.Cookie = cookie;
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,
@@ -64,7 +69,7 @@ async function apiFetch(path, { method = "GET", body, token } = {}) {
   try {
     json = await res.json();
   } catch {}
-  return { status: res.status, body: json };
+  return { status: res.status, body: json, setCookie: res.headers.get("set-cookie") };
 }
 
 // ── Release upload (multipart) ────────────────────────────────────────────────
@@ -421,8 +426,22 @@ async function main() {
     assert(res.body.error?.code === "DUPLICATE_VERSION", `expected DUPLICATE_VERSION, got ${res.body.error?.code}`);
   });
 
+  // Phase 4 replaced the license-key-as-credential stand-in with real
+  // session auth — GET /api/portal/releases needs the portal session cookie
+  // now, not a ?licenseKey= query param. Logs in as licenseRel's customer
+  // (the same throwaway customer this whole run uses) once here; reused by
+  // cases 15-17 below.
+  let releasesPortalCookie;
+  await test("14b. log in to the portal for the release-visibility cases below", async () => {
+    const reqRes = await apiFetch("/api/portal/auth/request-link", { method: "POST", body: { email: customerEmail } });
+    assert(typeof reqRes.body.debugToken === "string", "no debugToken — set TEST_EXPOSE_MAGIC_LINK=1 in .env.staging");
+    const verifyRes = await apiFetch("/api/portal/auth/verify", { method: "POST", body: { token: reqRes.body.debugToken } });
+    assert(verifyRes.status === 200, `portal login failed: ${JSON.stringify(verifyRes.body)}`);
+    releasesPortalCookie = verifyRes.setCookie.split(";")[0];
+  });
+
   await test("15. unpublished release -> not visible on GET /api/portal/releases", async () => {
-    const res = await apiFetch(`/api/portal/releases?licenseKey=${encodeURIComponent(licenseRel.rawKey)}`);
+    const res = await apiFetch("/api/portal/releases", { cookie: releasesPortalCookie });
     assert(res.status === 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
     const found = res.body.items.find((r) => r.id === releaseId);
     assert(!found, "unpublished release must not appear in the portal listing");
@@ -436,14 +455,14 @@ async function main() {
     });
     assert(publishRes.status === 200, `publish failed: ${JSON.stringify(publishRes.body)}`);
 
-    const res = await apiFetch(`/api/portal/releases?licenseKey=${encodeURIComponent(licenseRel.rawKey)}`);
+    const res = await apiFetch("/api/portal/releases", { cookie: releasesPortalCookie });
     const found = res.body.items.find((r) => r.id === releaseId);
     assert(!!found, "published release must appear in the portal listing");
     assert(typeof found.downloadUrl === "string" && found.downloadUrl.includes("token="), "expected a signed downloadUrl");
   });
 
   await test("17. download via the signed token -> 200, byte-for-byte match", async () => {
-    const listRes = await apiFetch(`/api/portal/releases?licenseKey=${encodeURIComponent(licenseRel.rawKey)}`);
+    const listRes = await apiFetch("/api/portal/releases", { cookie: releasesPortalCookie });
     const found = listRes.body.items.find((r) => r.id === releaseId);
     const downloadRes = await fetch(`${BASE_URL}${found.downloadUrl}`);
     assert(downloadRes.status === 200, `expected 200, got ${downloadRes.status}`);
@@ -452,7 +471,7 @@ async function main() {
   });
 
   await test("18. expired download token -> 403 TOKEN_INVALID", async () => {
-    const expiredToken = craftExpiredDownloadToken({ releaseId, licenseId: licenseRel.id });
+    const expiredToken = craftExpiredDownloadToken({ releaseId, customerId: customerId });
     const res = await apiFetch(`/api/portal/releases/${releaseId}/download?token=${expiredToken}`);
     assert(res.status === 403, `expected 403, got ${res.status}: ${JSON.stringify(res.body)}`);
     assert(res.body.error?.code === "TOKEN_INVALID", `expected TOKEN_INVALID, got ${res.body.error?.code}`);
@@ -482,6 +501,47 @@ async function main() {
   } else {
     console.log("\n(skipping rate-limit case — pass --rate-limit to run it separately)");
   }
+
+  console.log("\n--- Cases 19-22: customer portal auth (Phase 4) ---");
+
+  let portalCookie;
+  let magicLinkToken;
+
+  await test("19. request magic link for a real customer -> 200, debugToken present", async () => {
+    const res = await apiFetch("/api/portal/auth/request-link", {
+      method: "POST",
+      body: { email: customerEmail },
+    });
+    assert(res.status === 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(
+      typeof res.body.debugToken === "string",
+      "no debugToken in response — set TEST_EXPOSE_MAGIC_LINK=1 in .env.staging"
+    );
+    magicLinkToken = res.body.debugToken;
+  });
+
+  await test("20. verify magic link -> 200, session cookie set, correct customer", async () => {
+    const res = await apiFetch("/api/portal/auth/verify", { method: "POST", body: { token: magicLinkToken } });
+    assert(res.status === 200, `expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.customer?.email === customerEmail, "verify response has the wrong customer");
+    assert(!!res.setCookie, "no Set-Cookie header on a successful verify");
+    portalCookie = res.setCookie.split(";")[0]; // "mc_portal_session=<jwt>"
+  });
+
+  await test("21. replay the same magic link token -> 403 TOKEN_INVALID (single-use)", async () => {
+    const res = await apiFetch("/api/portal/auth/verify", { method: "POST", body: { token: magicLinkToken } });
+    assert(res.status === 403, `expected 403, got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert(res.body.error?.code === "TOKEN_INVALID", `expected TOKEN_INVALID, got ${res.body.error?.code}`);
+  });
+
+  await test("22. GET /api/portal/me -> 401 with no cookie, 200 with the session cookie", async () => {
+    const noAuth = await apiFetch("/api/portal/me");
+    assert(noAuth.status === 401, `expected 401 with no cookie, got ${noAuth.status}`);
+
+    const authed = await apiFetch("/api/portal/me", { cookie: portalCookie });
+    assert(authed.status === 200, `expected 200 with session cookie, got ${authed.status}: ${JSON.stringify(authed.body)}`);
+    assert(authed.body.customer?.email === customerEmail, "session resolved to the wrong customer");
+  });
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
   console.log("\n--- Cleanup: unpublishing + deleting releases created by this run ---");
