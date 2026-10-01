@@ -46,7 +46,10 @@ portalAuthRouter.post(
       data: { customerId: customer.id, tokenHash, expiresAt },
     });
 
-    const loginUrl = `${env.portalUrl}/verify?token=${rawToken}`;
+    // /login/verify (not /verify) renders a "Log in" button rather than
+    // auto-consuming the token on page load — see the /verify handler's
+    // comment below for why that distinction matters.
+    const loginUrl = `${env.portalUrl}/login/verify?token=${rawToken}`;
     await sendMagicLinkEmail({ to: customer.email, loginUrl, ttlMinutes: env.magicLinkTtlMinutes });
 
     // Staging-only escape hatch for scripts/test-licensing.js: there is no
@@ -62,23 +65,41 @@ portalAuthRouter.post(
   })
 );
 
-// POST /api/portal/auth/verify — single-use: usedAt is set the moment this
-// succeeds, so a replayed (stolen-from-logs, re-clicked) link is rejected on
-// its second use even if still within its TTL.
+// POST /api/portal/auth/verify — single-use. This endpoint is the ONLY
+// place a magic-link token is ever consumed; the portal's /login/verify page
+// itself (a plain client-side route render, no API call) does not touch it
+// — see portal/src/pages/VerifyPage.tsx. That split exists for two reasons:
+// an email security scanner pre-fetching the emailed link (a GET, and this
+// is a POST-only route anyway) must not burn the token before the real
+// customer clicks it, and a page-load side effect calling this endpoint
+// directly (the previous design) breaks under React StrictMode's
+// intentional double-invoke of effects in development — confirmed live via
+// Playwright: a single page load fired two real POSTs here.
+//
+// The claim itself is a single atomic conditional UPDATE (updateMany with
+// usedAt: null and expiresAt in the future in the WHERE clause), not a
+// separate findUnique-then-update — the previous two-step version had a
+// real TOCTOU race: two concurrent requests for the same token could both
+// pass the "not yet used" check before either write committed, each then
+// issuing its own session for a token meant to be single-use. Confirmed
+// live: two near-simultaneous requests for one fresh token both returned
+// 200 with distinct sessions before this fix.
 portalAuthRouter.post(
   "/verify",
   asyncHandler(async (req, res) => {
     const { token } = magicLinkVerifySchema.parse(req.body);
     const tokenHash = hashMagicLinkToken(token);
 
-    const record = await prisma.magicLinkToken.findUnique({ where: { tokenHash } });
-    if (!record || record.usedAt || record.expiresAt.getTime() < Date.now()) {
+    const claim = await prisma.magicLinkToken.updateMany({
+      where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    });
+    if (claim.count === 0) {
       throw new ApiError(403, "TOKEN_INVALID", "This login link is invalid, already used, or has expired");
     }
 
-    await prisma.magicLinkToken.update({ where: { id: record.id }, data: { usedAt: new Date() } });
-
-    const customer = await prisma.customer.findUnique({ where: { id: record.customerId } });
+    const record = await prisma.magicLinkToken.findUnique({ where: { tokenHash } });
+    const customer = record ? await prisma.customer.findUnique({ where: { id: record.customerId } }) : null;
     if (!customer) {
       // Shouldn't happen (FK), but a deleted customer between request and
       // verify is a real possibility over a 15-minute window.
