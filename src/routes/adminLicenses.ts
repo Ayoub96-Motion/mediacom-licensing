@@ -10,6 +10,7 @@ import { sendLicenseEmail } from "../lib/email";
 import { logAction } from "../utils/auditLog";
 import { buildLicenseWhere } from "../utils/licenseQuery";
 import { queryAuditLog } from "./adminAuditLog";
+import { revokeAllSessionsForCustomer } from "../services/portalSession";
 
 export const adminLicensesRouter = Router();
 
@@ -189,6 +190,14 @@ adminLicensesRouter.post(
       where: { id },
       data: { status: "revoked" },
     });
+
+    // Revoking a license revokes the customer's portal sessions too — a
+    // customer who still has a live session shouldn't keep portal access
+    // (devices, downloads, the now-revoked key) just because their cookie
+    // hasn't expired yet. Revokes ALL of their sessions, not just ones tied
+    // to this specific license — simplest correct behavior given a session
+    // isn't scoped to one license.
+    await revokeAllSessionsForCustomer(license.customerId);
 
     await logAction({
       adminId: req.admin!.sub,

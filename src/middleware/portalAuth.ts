@@ -1,26 +1,33 @@
-// Phase 4: real customer portal authentication — replaces the Phase 3 stub
-// that treated a raw license key as the credential on every request (see
-// git history for that version's TODO). Sessions are httpOnly-cookie-based;
-// see src/services/portalSession.ts for the cookie/JWT mechanics.
+// Customer portal authentication — server-side sessions (see
+// src/services/portalSession.ts). Replaced a stateless-JWT version after a
+// security review found logout couldn't actually revoke a JWT, only clear
+// the client's copy of it.
 
 import type { NextFunction, Request, Response } from "express";
+import type { PortalSession } from "@prisma/client";
+import { asyncHandler } from "./errorHandler";
 import { ApiError } from "../lib/errors";
-import { readCustomerIdFromRequest } from "../services/portalSession";
+import { resolvePortalSession } from "../services/portalSession";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       customerId?: string;
+      // Exposed (not just customerId) so routes that need the session's own
+      // metadata — currently just createdAt, for the reveal-key freshness
+      // check — don't need a second lookup.
+      portalSession?: PortalSession;
     }
   }
 }
 
-export function requirePortalSession(req: Request, _res: Response, next: NextFunction) {
-  const customerId = readCustomerIdFromRequest(req);
-  if (!customerId) {
+export const requirePortalSession = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
+  const session = await resolvePortalSession(req);
+  if (!session) {
     throw new ApiError(401, "unauthorized", "Not logged in, or your session has expired");
   }
-  req.customerId = customerId;
+  req.customerId = session.customerId;
+  req.portalSession = session;
   next();
-}
+});

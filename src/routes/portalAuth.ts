@@ -8,7 +8,8 @@ import { magicLinkRequestSchema, magicLinkVerifySchema } from "../schemas";
 import { ApiError } from "../lib/errors";
 import { env } from "../config/env";
 import { sendMagicLinkEmail } from "../lib/email";
-import { hashMagicLinkToken, issueSession, clearSession } from "../services/portalSession";
+import { hashMagicLinkToken, issueSession, revokeSessionByCookie, revokeAllSessionsForCustomer } from "../services/portalSession";
+import { requirePortalSession } from "../middleware/portalAuth";
 import { logAction } from "../utils/auditLog";
 
 export const portalAuthRouter = Router();
@@ -84,7 +85,7 @@ portalAuthRouter.post(
       throw new ApiError(403, "TOKEN_INVALID", "This login link is no longer valid");
     }
 
-    issueSession(res, customer.id);
+    await issueSession(res, customer.id, req);
 
     await logAction({
       actorType: "customer",
@@ -98,10 +99,25 @@ portalAuthRouter.post(
   })
 );
 
+// Revokes the session server-side (not just a clear-cookie response) — see
+// src/services/portalSession.ts's header comment on why this matters.
+// Idempotent: no cookie / an already-invalid one is not an error.
 portalAuthRouter.post(
   "/logout",
-  asyncHandler(async (_req, res) => {
-    clearSession(res);
+  asyncHandler(async (req, res) => {
+    await revokeSessionByCookie(req, res);
+    res.json({ success: true });
+  })
+);
+
+// Self-service "log out everywhere" — revokes every non-revoked session for
+// this customer, not just the one making the request.
+portalAuthRouter.post(
+  "/logout-all",
+  requirePortalSession,
+  asyncHandler(async (req, res) => {
+    await revokeAllSessionsForCustomer(req.customerId!);
+    await revokeSessionByCookie(req, res); // also clears the cookie on this device
     res.json({ success: true });
   })
 );

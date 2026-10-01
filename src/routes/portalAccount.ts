@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../middleware/errorHandler";
 import { ApiError, paramId } from "../lib/errors";
 import { decryptKey } from "../lib/keyEncryption";
+import { isSessionFreshEnough } from "../services/portalSession";
 import { logAction } from "../utils/auditLog";
 
 export const portalAccountRouter = Router();
@@ -55,6 +56,18 @@ async function requireOwnedLicense(licenseId: string, customerId: string) {
 portalAccountRouter.post(
   "/licenses/:id/reveal-key",
   asyncHandler(async (req, res) => {
+    // Sensitive action — an old-but-still-valid session isn't enough on its
+    // own, so a long-lived session (up to 14 days) can't be used to reveal a
+    // key weeks after the customer actually logged in. req.portalSession is
+    // always set here (this route is mounted behind requirePortalSession).
+    if (!isSessionFreshEnough(req.portalSession!)) {
+      throw new ApiError(
+        403,
+        "REAUTH_REQUIRED",
+        "For your security, please log in again to reveal this key — request a new login link."
+      );
+    }
+
     const licenseId = paramId(req, "id");
     const license = await requireOwnedLicense(licenseId, req.customerId!);
 
