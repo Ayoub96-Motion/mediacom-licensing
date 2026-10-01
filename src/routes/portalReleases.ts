@@ -5,7 +5,7 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { ApiError, paramId } from "../lib/errors";
 import { portalDownloadQuerySchema, portalReleasesQuerySchema } from "../schemas";
 import { publicLicenseRateLimit } from "../middleware/rateLimit";
-import { resolveLicenseFromKey } from "../middleware/portalAuth";
+import { requirePortalSession } from "../middleware/portalAuth";
 import { meetsMinPlan } from "../constants/tiers";
 import { serializeRelease, toApiProduct, toPrismaProduct } from "../utils/releaseProduct";
 import { signDownloadToken, verifyDownloadToken } from "../services/releaseDownload";
@@ -14,20 +14,24 @@ import { logAction } from "../utils/auditLog";
 
 export const portalReleasesRouter = Router();
 
-// Same trust model as src/routes/public.ts and apiDevice.ts — no admin auth,
-// no CORS restriction, IP rate-limited. (Phase 4 may want a dedicated CORS
-// origin once the actual customer portal domain exists; nothing to restrict
-// to yet.)
+function isLicenseUsable(license: { status: string; expiresAt: Date | null }): boolean {
+  if (license.status !== "active") return false;
+  return !license.expiresAt || license.expiresAt.getTime() > Date.now();
+}
 
+// Session-authenticated (Phase 4 — requirePortalSession) rather than a raw
+// license key: a customer may own several licenses, so visibility is now
+// computed across ALL of their active, non-expired ones — a release is
+// visible if ANY of them meets its minPlanCode.
 portalReleasesRouter.get(
   "/",
+  requirePortalSession,
   publicLicenseRateLimit,
   asyncHandler(async (req, res) => {
     const query = portalReleasesQuerySchema.parse(req.query);
-    // Throws 403 LICENSE_NOT_FOUND / LICENSE_REVOKED / LICENSE_EXPIRED — see
-    // src/middleware/portalAuth.ts's TODO on this being a stand-in for real
-    // portal auth.
-    const license = await resolveLicenseFromKey(query.licenseKey);
+
+    const licenses = await prisma.license.findMany({ where: { customerId: req.customerId! } });
+    const usableLicenses = licenses.filter(isLicenseUsable);
 
     const releases = await prisma.release.findMany({
       where: {
@@ -37,15 +41,17 @@ portalReleasesRouter.get(
       orderBy: { createdAt: "desc" },
     });
 
-    const visible = releases.filter((release) => meetsMinPlan(license.planCode, release.minPlanCode));
+    const visible = releases.filter((release) =>
+      usableLicenses.some((license) => meetsMinPlan(license.planCode, release.minPlanCode))
+    );
 
     const items = visible.map((release) => {
       const dto = serializeRelease(release);
       if (release.storageKey) {
-        // Short-lived, single-release, single-license token — see
+        // Short-lived, single-release, single-customer token — see
         // src/services/releaseDownload.ts. No object storage means no real
         // pre-signed URL; this is the token-checked-stream alternative.
-        const token = signDownloadToken({ releaseId: release.id, licenseId: license.id });
+        const token = signDownloadToken({ releaseId: release.id, customerId: req.customerId! });
         return { ...dto, downloadUrl: `/api/portal/releases/${release.id}/download?token=${token}` };
       }
       // android/ios — externalUrl is already a public app-store link, no token needed.
@@ -56,6 +62,10 @@ portalReleasesRouter.get(
   })
 );
 
+// NOT behind requirePortalSession — the browser follows this as a plain
+// link/navigation (so the file downloads with a normal Save dialog rather
+// than being fetched via authenticated XHR), and its own signed token is
+// the credential, scoped to exactly one release for 10 minutes.
 portalReleasesRouter.get(
   "/:id/download",
   publicLicenseRateLimit,
@@ -87,7 +97,7 @@ portalReleasesRouter.get(
       action: "release.download",
       targetType: "Release",
       targetId: release.id,
-      metadata: { licenseId: payload.licenseId, product: release.product, version: release.version },
+      metadata: { customerId: payload.customerId, product: release.product, version: release.version },
     });
 
     const ext = path.extname(release.storageKey);

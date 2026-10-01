@@ -9,7 +9,10 @@ import { env } from "../config/env";
 
 export interface DownloadTokenPayload {
   releaseId: string;
-  licenseId: string;
+  // Phase 4: identifies the customer whose portal session issued this
+  // download link, not a specific license — a release can be reachable via
+  // any one of a customer's licenses (see routes/portalReleases.ts).
+  customerId: string;
 }
 
 function secret(): string {
@@ -26,8 +29,8 @@ export function signDownloadToken(payload: DownloadTokenPayload): string {
 /** Throws (jsonwebtoken's own TokenExpiredError/JsonWebTokenError) on an invalid or expired token — callers catch and map to a 403. */
 export function verifyDownloadToken(token: string): DownloadTokenPayload {
   const decoded = jwt.verify(token, secret());
-  if (typeof decoded === "string" || !decoded.releaseId || !decoded.licenseId) {
+  if (typeof decoded === "string" || !decoded.releaseId || !decoded.customerId) {
     throw new Error("malformed download token payload");
   }
-  return { releaseId: decoded.releaseId, licenseId: decoded.licenseId };
+  return { releaseId: decoded.releaseId, customerId: decoded.customerId };
 }
