@@ -22,8 +22,41 @@ model Customer {
 
   licenses         License[]
   magicLinkTokens  MagicLinkToken[]
+  portalSessions   PortalSession[]
 
   @@index([email])
+}
+
+// Server-side portal sessions (replaces the stateless-JWT cookie — a
+// security review of Phase 4 found that logout couldn't actually revoke a
+// stateless JWT, only clear the client's copy of it). The cookie holds the
+// raw random session token; only its SHA-256 hash is ever persisted, same
+// principle as License.keyHash and MagicLinkToken.tokenHash. Kept as a
+// separate id/tokenHash pair (not overloading `id` to literally be the
+// hash) to match every other model's convention in this schema.
+model PortalSession {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  tokenHash String @unique @db.Char(64)
+
+  createdAt  DateTime  @default(now())
+  // Updated at most once per 5 minutes (src/services/portalSession.ts) —
+  // not on every single request, to avoid a DB write per API call.
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  // Set on logout, on license revocation, or via "log out all devices" —
+  // never deleted, so a revoked session's audit trail (who had it, when)
+  // survives. A session is usable only while this is null AND expiresAt
+  // hasn't passed.
+  revokedAt  DateTime?
+
+  ip        String?
+  userAgent String? @db.Text
+
+  @@index([customerId])
+  @@index([expiresAt])
 }
 
 // Phase 4: customer portal auth. A magic-link request never reveals whether
