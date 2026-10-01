@@ -543,6 +543,36 @@ async function main() {
     assert(authed.body.customer?.email === customerEmail, "session resolved to the wrong customer");
   });
 
+  await test("23. logout revokes the session server-side — the old cookie is rejected, not just cleared", async () => {
+    const before = await apiFetch("/api/portal/me", { cookie: portalCookie });
+    assert(before.status === 200, `expected the session to still work before logout, got ${before.status}`);
+
+    const logoutRes = await apiFetch("/api/portal/auth/logout", { method: "POST", cookie: portalCookie });
+    assert(logoutRes.status === 200, `logout failed: ${JSON.stringify(logoutRes.body)}`);
+
+    // The exact same (now-revoked) cookie value, replayed directly — this is
+    // the case a stateless JWT could never actually fail (PortalSession's
+    // revokedAt is what makes this a real server-side check).
+    const after = await apiFetch("/api/portal/me", { cookie: portalCookie });
+    assert(after.status === 401, `expected 401 after logout, got ${after.status}: ${JSON.stringify(after.body)}`);
+  });
+
+  await test("24. revoking a license revokes the customer's portal sessions", async () => {
+    // Fresh login — case 23 just revoked the previous session.
+    const reqRes = await apiFetch("/api/portal/auth/request-link", { method: "POST", body: { email: customerEmail } });
+    const verifyRes = await apiFetch("/api/portal/auth/verify", { method: "POST", body: { token: reqRes.body.debugToken } });
+    const freshCookie = verifyRes.setCookie.split(";")[0];
+
+    const before = await apiFetch("/api/portal/me", { cookie: freshCookie });
+    assert(before.status === 200, `expected the fresh session to work, got ${before.status}`);
+
+    const revokeRes = await apiFetch(`/admin/licenses/${licenseM.id}/revoke`, { method: "POST", token: adminToken });
+    assert(revokeRes.status === 200, `license revoke failed: ${JSON.stringify(revokeRes.body)}`);
+
+    const after = await apiFetch("/api/portal/me", { cookie: freshCookie });
+    assert(after.status === 401, `expected 401 after the customer's license was revoked, got ${after.status}`);
+  });
+
   // ── Cleanup ──────────────────────────────────────────────────────────────
   console.log("\n--- Cleanup: unpublishing + deleting releases created by this run ---");
   for (const id of createdReleaseIds) {
