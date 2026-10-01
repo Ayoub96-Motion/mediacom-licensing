@@ -20,9 +20,36 @@ model Customer {
   phone     String?
   createdAt DateTime @default(now())
 
-  licenses License[]
+  licenses         License[]
+  magicLinkTokens  MagicLinkToken[]
 
   @@index([email])
+}
+
+// Phase 4: customer portal auth. A magic-link request never reveals whether
+// the submitted email matched a Customer (src/routes/portalAuth.ts always
+// returns the same generic response either way) — this table only ever gets
+// a row when it DID match, which is fine precisely because its existence is
+// never observable from the API response.
+model MagicLinkToken {
+  id         String    @id @default(cuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id])
+
+  // SHA-256(raw token), hex — the raw token exists only in the emailed link,
+  // never persisted (same principle as License.keyHash never storing the
+  // raw key in plain form).
+  tokenHash String @unique @db.Char(64)
+
+  expiresAt DateTime
+  // Single-use: set the moment the token is redeemed, checked on every
+  // verify attempt (including a replay of an already-used token).
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([customerId])
+  @@index([expiresAt])
 }
 
 enum LicenseType {
