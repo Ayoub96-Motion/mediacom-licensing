@@ -127,7 +127,11 @@ export type AuditAction =
   | "release.unpublish"
   | "release.delete"
   // actorType 'customer', no admin — logged from the portal download endpoint.
-  | "release.download";
+  | "release.download"
+  // Phase 4 portal actions — all actorType 'customer', no admin.
+  | "customer.login"
+  | "customer.license.reveal_key"
+  | "customer.device.deactivate";
 
 export type AuditTargetType = "License" | "Customer" | "Device" | "Release";
 export type AuditActorType = "admin" | "customer" | "device";

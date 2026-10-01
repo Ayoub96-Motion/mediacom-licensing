@@ -9,6 +9,15 @@ const ACTION_LABELS: Record<string, string> = {
   "device.deactivate": "Deactivated device",
   "device.activate": "Activated device",
   "device.refresh": "Refreshed device token",
+  "release.upload": "Uploaded release",
+  "release.update": "Updated release",
+  "release.publish": "Published release",
+  "release.unpublish": "Unpublished release",
+  "release.delete": "Deleted release",
+  "release.download": "Downloaded release",
+  "customer.login": "Logged in to portal",
+  "customer.license.reveal_key": "Revealed license key",
+  "customer.device.deactivate": "Deactivated device (self-service)",
 };
 
 export function actionLabel(action: string): string {
@@ -82,6 +91,31 @@ export function summarizeEntry(entry: AuditLogEntry): string {
 
     case "device.refresh":
       return "Token refreshed";
+
+    case "release.upload":
+      return `${m.product} ${m.version} (${m.channel})${m.fileSize ? `, ${Math.round(Number(m.fileSize) / 1024 / 1024)} MB` : ""}`;
+
+    case "release.update":
+    case "release.publish":
+    case "release.unpublish": {
+      const lines = diffLines((m.before as Record<string, unknown>) ?? {}, (m.after as Record<string, unknown>) ?? {});
+      return lines.length ? lines.join(", ") : "No fields changed";
+    }
+
+    case "release.delete":
+      return `${m.product} ${m.version}`;
+
+    case "release.download":
+      return `${m.product} ${m.version}`;
+
+    case "customer.login":
+      return "Portal login via magic link";
+
+    case "customer.license.reveal_key":
+      return "Customer revealed their license key";
+
+    case "customer.device.deactivate":
+      return "Customer deactivated one of their own devices";
 
     default:
       return JSON.stringify(m);
