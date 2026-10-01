@@ -128,15 +128,23 @@ export const listReleasesQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().max(100).default(20),
 });
 
-// Portal auth is stubbed (see src/middleware/portalAuth.ts) — the raw
-// license key stands in for a real session until Phase 4's portal auth
-// exists.
+// Phase 4: real portal session auth (src/middleware/portalAuth.ts) — no
+// license key on this request any more, the session cookie identifies the
+// customer, and visibility is computed across all of their active licenses.
 export const portalReleasesQuerySchema = z.object({
-  licenseKey: z.string().min(1),
   product: z.enum(["server-win", "android", "ios"]).optional(),
 });
 
 export const portalDownloadQuerySchema = z.object({
+  token: z.string().min(1),
+});
+
+// ── Phase 4: customer portal auth ────────────────────────────────────────────
+export const magicLinkRequestSchema = z.object({
+  email: z.string().email(),
+});
+
+export const magicLinkVerifySchema = z.object({
   token: z.string().min(1),
 });
 

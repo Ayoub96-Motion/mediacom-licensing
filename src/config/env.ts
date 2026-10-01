@@ -44,4 +44,12 @@ export const env = {
   releaseDownloadSecret: process.env.RELEASE_DOWNLOAD_SECRET,
   releaseDownloadTtlMinutes: Number(process.env.RELEASE_DOWNLOAD_TTL_MINUTES ?? 10),
   releaseMaxUploadSizeMb: Number(process.env.RELEASE_MAX_UPLOAD_SIZE_MB ?? 500),
+
+  // Phase 4 (customer portal auth) — also lazily validated at point of use
+  // (src/services/portalSession.ts, src/routes/portalAuth.ts), same
+  // reasoning as the Phase 1/3 vars above.
+  customerSessionSecret: process.env.CUSTOMER_SESSION_SECRET,
+  customerSessionDays: Number(process.env.CUSTOMER_SESSION_DAYS ?? 14),
+  magicLinkTtlMinutes: Number(process.env.MAGIC_LINK_TTL_MINUTES ?? 15),
+  portalUrl: process.env.PORTAL_URL ?? "http://localhost:5175",
 };

@@ -36,3 +36,17 @@ export const deviceActivateRateLimit = rateLimit({
     res.status(429).json(errorBody("rate_limited", "Too many activation attempts, please try again later"));
   },
 });
+
+// Phase 4 portal auth: per-IP cap on magic-link requests, alongside the
+// per-EMAIL cap in middleware/magicLinkRateLimit.ts — this one blunts a
+// single IP hammering many different email addresses, which the per-email
+// cap alone wouldn't catch.
+export const magicLinkIpRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json(errorBody("rate_limited", "Too many requests, please try again later"));
+  },
+});

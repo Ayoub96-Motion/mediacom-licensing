@@ -12,7 +12,10 @@ import { adminActivationsRouter } from "./routes/adminActivations";
 import { adminPlansRouter } from "./routes/adminPlans";
 import { adminReleasesRouter } from "./routes/adminReleases";
 import { portalReleasesRouter } from "./routes/portalReleases";
+import { portalAuthRouter } from "./routes/portalAuth";
+import { portalAccountRouter } from "./routes/portalAccount";
 import { requireAdminAuth } from "./middleware/adminAuth";
+import { requirePortalSession } from "./middleware/portalAuth";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 export function createApp() {
@@ -29,12 +32,21 @@ export function createApp() {
   // prefix and new endpoints. See routes/apiDevice.ts.
   app.use("/api/device", apiDeviceRouter);
 
-  // Phase 3: customer-portal-facing release listing/download. Same trust
-  // model as apiDeviceRouter above (no admin auth, no CORS restriction, IP
-  // rate-limited) — see routes/portalReleases.ts. Portal auth is stubbed
-  // (a raw license key stands in for a session) until Phase 4's real portal
-  // auth exists — see middleware/portalAuth.ts's TODO.
-  app.use("/api/portal/releases", portalReleasesRouter);
+  // Phase 4: customer portal — browser app, session cookie based (see
+  // middleware/portalAuth.ts, services/portalSession.ts). Needs its own CORS
+  // instance with credentials:true (cookies aren't sent cross-origin
+  // otherwise) and an explicit origin — "*" is invalid alongside
+  // credentials:true per the Fetch spec, and cors() enforces that.
+  const portalCors = cors({ origin: env.portalUrl, credentials: true });
+
+  app.use("/api/portal/auth", portalCors, portalAuthRouter);
+  // portalReleasesRouter's own /:id/download route intentionally isn't
+  // behind requirePortalSession (see its comment — a signed token in the
+  // URL is its credential, for a plain browser navigation/download, not an
+  // authenticated fetch); the list route inside it applies the middleware
+  // itself.
+  app.use("/api/portal/releases", portalCors, portalReleasesRouter);
+  app.use("/api/portal", portalCors, requirePortalSession, portalAccountRouter);
 
   // Admin routes: browser-based dashboard, restricted to a configured origin.
   const adminCors = cors({ origin: env.adminDashboardOrigin });
