@@ -573,6 +573,57 @@ async function main() {
     assert(after.status === 401, `expected 401 after the customer's license was revoked, got ${after.status}`);
   });
 
+  // Dedicated second customer for cases 25-26 — by this point customerEmail
+  // has already made 4 magic-link requests (14b, 19, 23, 24) and would trip
+  // the per-email cap (3/15min) before these two even get to run.
+  const magicLinkTestEmail = `magic-link-test-${stamp}@example.com`;
+  const magicLinkTestCustomer = await apiFetch("/admin/customers", {
+    method: "POST",
+    token: adminToken,
+    body: { name: `Magic Link Test ${stamp}`, email: magicLinkTestEmail },
+  });
+  assert(magicLinkTestCustomer.status === 201, `customer creation failed: ${JSON.stringify(magicLinkTestCustomer.body)}`);
+  const magicLinkTestCustomerId = magicLinkTestCustomer.body.id;
+
+  await test("25. GET the verify URL twice -> nothing consumed, then POST -> login still succeeds", async () => {
+    const reqRes = await apiFetch("/api/portal/auth/request-link", { method: "POST", body: { email: magicLinkTestEmail } });
+    const token = reqRes.body.debugToken;
+    assert(typeof token === "string", "no debugToken — set TEST_EXPOSE_MAGIC_LINK=1 in .env.staging");
+
+    // Simulates an email security scanner pre-fetching the link (or a user
+    // reloading the page) before ever clicking anything — there is no GET
+    // handler on this path that could consume the token either way, but
+    // this proves it end to end rather than by code inspection alone.
+    const get1 = await apiFetch(`/api/portal/auth/verify?token=${token}`);
+    const get2 = await apiFetch(`/api/portal/auth/verify?token=${token}`);
+    assert(get1.status !== 200 && get2.status !== 200, "a bare GET must never itself log anyone in");
+
+    const postRes = await apiFetch("/api/portal/auth/verify", { method: "POST", body: { token } });
+    assert(postRes.status === 200, `expected the real POST login to still succeed, got ${postRes.status}: ${JSON.stringify(postRes.body)}`);
+  });
+
+  await test("26. two concurrent POSTs for the same fresh token -> exactly one succeeds", async () => {
+    // Regression for a real bug: the verify endpoint used to do a
+    // findUnique-then-update with no atomicity, so two near-simultaneous
+    // requests for one token could both pass the "not yet used" check
+    // before either write committed — confirmed live (both returned 200,
+    // each issuing its own session) before it was fixed to a single atomic
+    // conditional updateMany. This fires the two requests truly
+    // concurrently (Promise.all, not sequential awaits) to actually
+    // exercise the race, not just the already-used path cases 20-21 cover.
+    const reqRes = await apiFetch("/api/portal/auth/request-link", { method: "POST", body: { email: magicLinkTestEmail } });
+    const token = reqRes.body.debugToken;
+
+    const [a, b] = await Promise.all([
+      apiFetch("/api/portal/auth/verify", { method: "POST", body: { token } }),
+      apiFetch("/api/portal/auth/verify", { method: "POST", body: { token } }),
+    ]);
+    const successes = [a.status, b.status].filter((s) => s === 200).length;
+    const rejections = [a.status, b.status].filter((s) => s === 403).length;
+    assert(successes === 1, `expected exactly 1 success, got ${successes} (statuses: ${a.status}, ${b.status})`);
+    assert(rejections === 1, `expected exactly 1 rejection, got ${rejections} (statuses: ${a.status}, ${b.status})`);
+  });
+
   // ── Cleanup ──────────────────────────────────────────────────────────────
   console.log("\n--- Cleanup: unpublishing + deleting releases created by this run ---");
   for (const id of createdReleaseIds) {

@@ -100,3 +100,63 @@ Re-verified end to end against staging after the fix (see
 `scripts/test-licensing.js` cases 9/10 and the full security-case run):
 replaying a logged-out session cookie now gets 401, and revoking a license
 revokes the customer's sessions immediately.
+
+## Fixed: magic links failing with "invalid, already used, or expired" on first use
+
+**What was found** (2026-10-01, reported as every fresh link failing): two
+independent bugs, both stemming from the original `/verify` page design,
+where loading the page auto-called the mutating verify endpoint in a
+`useEffect`:
+
+1. **React StrictMode double-invoke.** In development, React intentionally
+   mounts → cleans up → re-mounts every component once, specifically to
+   surface effects with side effects that aren't idempotent. The old
+   `VerifyPage` called `verifyMagicLink(token)` directly in a `useEffect`; a
+   `cancelled` flag suppressed the resulting `setState` on the first
+   invocation but did **not** stop the actual HTTP request from going out.
+   Confirmed live via Playwright: a single page load fired two real
+   `POST /api/portal/auth/verify` requests.
+2. **A real race in the verify endpoint**, exposed by (1) but not caused by
+   it — `/verify` did a `findUnique` (check `usedAt`/`expiresAt`) followed by
+   a separate `update` (set `usedAt`), with no transaction or row lock
+   between them. Two near-simultaneous requests for the same token could
+   both pass the "not yet used" check before either write committed.
+   Confirmed live: two such requests both returned `200`, each issuing its
+   own session, for a token meant to be single-use. Depending on exact
+   timing this race can also resolve the other way (the second request's
+   `findUnique` runs after the first's `update` has already committed),
+   which is the "already used" symptom that was actually reported — same
+   root cause, timing-dependent outcome.
+
+Ruled out (each confirmed independently, not assumed): timezone handling
+(`NOW()`, `UTC_TIMESTAMP()`, and Node's clock all agreed to the second;
+MySQL's session `time_zone` is `SYSTEM`, which is UTC on this container);
+token hashing (an independently-computed SHA-256 of a freshly issued raw
+token matched the stored `tokenHash` exactly — no URL-encoding mismatch);
+and the link URL itself (pointed at the correct portal origin and a route
+the frontend did handle).
+
+**Fix**:
+
+- `POST /api/portal/auth/verify`'s claim is now a single atomic conditional
+  `updateMany` (`WHERE tokenHash = ? AND usedAt IS NULL AND expiresAt > NOW()`),
+  not a separate check-then-update — this closes the race itself, independent
+  of whatever client calls it, however many times, concurrently or not.
+- The portal's login-link page moved from `/verify` to `/login/verify` and no
+  longer calls the verify endpoint on page load. It renders a "Log in to
+  MediaCom" button; only clicking it calls `POST /api/portal/auth/verify`.
+  This fixes the StrictMode issue (no mount-time side effect left to
+  double-invoke) and, as a second, independent benefit, means an email
+  security scanner pre-fetching the link (common — many corporate email
+  gateways `GET` every link in an inbox before a person ever opens it) can no
+  longer burn the token before the real customer clicks through.
+- The button's click handler is itself guarded by a ref (`hasSubmitted`) so
+  a double-click (or anything else that could fire it twice) can't send two
+  requests either — belt-and-suspenders on top of the server-side atomic fix,
+  not a substitute for it.
+
+Regression cases added to `scripts/test-licensing.js` (see cases 25-26):
+case 25 fires two `GET`s at the verify URL (confirming neither logs anyone
+in) and then the real `POST`, confirming login still succeeds; case 26 fires
+two truly concurrent `POST`s for one fresh token and asserts exactly one
+succeeds and the other gets `TOKEN_INVALID`, never both and never neither.

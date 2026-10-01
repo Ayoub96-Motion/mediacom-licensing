@@ -123,14 +123,16 @@ all, since only the token's SHA-256 hash is ever persisted:
 [email:stub] would send email: {
   to: 'someone@example.com',
   subject: 'Your MediaCom portal login link',
-  text: 'Click the link below to log in...\n\nhttp://localhost:5175/verify?token=<raw-token>\n\n...'
+  text: 'Click the link below to log in...\n\nhttp://localhost:5175/login/verify?token=<raw-token>\n\n...'
 }
 ```
 
 So to log into the portal locally: request a link from
-`http://localhost:5175/login`, then copy the `http://localhost:5175/verify?token=...`
+`http://localhost:5175/login`, then copy the `http://localhost:5175/login/verify?token=...`
 URL out of the **api** process's console output (in the `dev:all` window,
-look for the `[api]`-prefixed lines) and open it directly.
+look for the `[api]`-prefixed lines), open it, and click the "Log in to
+MediaCom" button it shows (loading the page itself does not log you in —
+see docs/SECURITY.md's note on why).
 
 If you'd rather not read server logs for this, set `TEST_EXPOSE_MAGIC_LINK=1`
 in `.env.staging` — `POST /api/portal/auth/request-link`'s JSON response then
