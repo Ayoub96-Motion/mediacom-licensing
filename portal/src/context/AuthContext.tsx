@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { getMe } from "../api/account";
-import { logout as logoutRequest } from "../api/auth";
+import { logout as logoutRequest, logoutAll as logoutAllRequest } from "../api/auth";
 import { ApiError } from "../api/client";
 import type { Customer, PortalLicense } from "../types";
 
@@ -12,6 +12,7 @@ interface AuthContextValue {
   // after any action that changes license/device state, to refetch /me.
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -53,8 +54,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function logoutAll() {
+    try {
+      await logoutAllRequest();
+    } finally {
+      setCustomer(null);
+      setLicenses([]);
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ customer, licenses, loading, refresh, logout }}>
+    <AuthContext.Provider value={{ customer, licenses, loading, refresh, logout, logoutAll }}>
       {children}
     </AuthContext.Provider>
   );

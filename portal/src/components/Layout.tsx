@@ -1,8 +1,18 @@
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export function Layout() {
-  const { customer, logout } = useAuth();
+  const { customer, logout, logoutAll } = useAuth();
+  const [confirmingLogoutAll, setConfirmingLogoutAll] = useState(false);
+
+  async function handleLogoutAll() {
+    if (!confirmingLogoutAll) {
+      setConfirmingLogoutAll(true);
+      return;
+    }
+    await logoutAll();
+  }
 
   return (
     <div className="portal-shell">
@@ -19,6 +29,9 @@ export function Layout() {
         <div className="portal-account">
           {customer && <span className="muted">{customer.email}</span>}
           <button className="link" onClick={logout}>Log out</button>
+          <button className="link" onClick={handleLogoutAll} onBlur={() => setConfirmingLogoutAll(false)}>
+            {confirmingLogoutAll ? "Click again to confirm" : "Log out all devices"}
+          </button>
         </div>
       </header>
       <main className="portal-content">

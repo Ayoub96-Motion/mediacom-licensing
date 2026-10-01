@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { revealKey, listDevices, deactivateDevice } from "../api/account";
+import { requestMagicLink } from "../api/auth";
 import { ApiError } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import type { PortalDevice, PortalLicense } from "../types";
 
 function summarizeFeatures(f: PortalLicense["features"]): string {
@@ -11,10 +13,13 @@ function summarizeFeatures(f: PortalLicense["features"]): string {
 }
 
 export function LicenseCard({ license }: { license: PortalLicense }) {
+  const { customer } = useAuth();
   const [rawKey, setRawKey] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [revealing, setRevealing] = useState(false);
+  const [needsReauth, setNeedsReauth] = useState(false);
+  const [reauthSent, setReauthSent] = useState(false);
 
   const [devicesOpen, setDevicesOpen] = useState(false);
   const [devices, setDevices] = useState<PortalDevice[] | null>(null);
@@ -25,14 +30,25 @@ export function LicenseCard({ license }: { license: PortalLicense }) {
   async function handleReveal() {
     setRevealing(true);
     setKeyError(null);
+    setNeedsReauth(false);
     try {
       const result = await revealKey(license.id);
       setRawKey(result.rawKey);
     } catch (err) {
-      setKeyError(err instanceof ApiError ? err.message : "Could not reveal key");
+      if (err instanceof ApiError && err.code === "REAUTH_REQUIRED") {
+        setNeedsReauth(true);
+      } else {
+        setKeyError(err instanceof ApiError ? err.message : "Could not reveal key");
+      }
     } finally {
       setRevealing(false);
     }
+  }
+
+  async function handleSendReauthLink() {
+    if (!customer) return;
+    await requestMagicLink(customer.email);
+    setReauthSent(true);
   }
 
   async function copyKey() {
@@ -110,6 +126,16 @@ export function LicenseCard({ license }: { license: PortalLicense }) {
           )}
         </div>
         {keyError && <div className="error-box">{keyError}</div>}
+        {needsReauth && (
+          <div className="error-box">
+            For your security, revealing a key needs a recent login.{" "}
+            {reauthSent ? (
+              "A new login link has been sent — click it, then try again."
+            ) : (
+              <button type="button" className="link" onClick={handleSendReauthLink}>Send a new login link</button>
+            )}
+          </div>
+        )}
 
         <button type="button" className="link" onClick={toggleDevices}>
           {devicesOpen ? "Hide devices" : "Manage devices"}

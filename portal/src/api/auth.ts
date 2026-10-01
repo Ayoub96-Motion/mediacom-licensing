@@ -12,3 +12,8 @@ export function verifyMagicLink(token: string): Promise<{ customer: Customer }> 
 export function logout(): Promise<{ success: boolean }> {
   return apiRequest<{ success: boolean }>("/api/portal/auth/logout", { method: "POST" });
 }
+
+/** Revokes every session for this customer, not just the current one. */
+export function logoutAll(): Promise<{ success: boolean }> {
+  return apiRequest<{ success: boolean }>("/api/portal/auth/logout-all", { method: "POST" });
+}
