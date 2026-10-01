@@ -28,6 +28,13 @@ export const env = {
   licensePrivateKeyPath: process.env.LICENSE_PRIVATE_KEY_PATH,
   leaseDays: Number(process.env.LEASE_DAYS ?? 30),
 
+  // Staging-only override for Windows/LAN testing of license-expiry
+  // ("degraded mode") behavior without waiting out a real multi-day lease —
+  // see leaseMinutesOverride's use in licenseSigner.ts's computeLeaseUntil().
+  // Refuses to even load in production (checked immediately below, not
+  // lazily) so this can never silently ship a minutes-long lease window.
+  leaseMinutesOverride: process.env.LEASE_MINUTES !== undefined ? Number(process.env.LEASE_MINUTES) : undefined,
+
   // Also lazily validated at point of use (src/lib/keygen.ts,
   // src/lib/keyEncryption.ts), not here — same reasoning as
   // licensePrivateKeyPath above.
@@ -53,3 +60,16 @@ export const env = {
   magicLinkTtlMinutes: Number(process.env.MAGIC_LINK_TTL_MINUTES ?? 15),
   portalUrl: process.env.PORTAL_URL ?? "http://localhost:5175",
 };
+
+// Checked eagerly (crashes at startup, not lazily at first sign()) — a
+// minutes-long lease window reaching production by accident (a copy-pasted
+// staging env var, a misconfigured deploy) would mean every licensed
+// install drops into degraded mode within minutes of its last successful
+// /device/refresh instead of the intended days-long offline grace window.
+if (env.nodeEnv === "production" && env.leaseMinutesOverride !== undefined) {
+  throw new Error(
+    "LEASE_MINUTES is set but NODE_ENV=production — refusing to start. " +
+      "LEASE_MINUTES is a staging-only override for testing lease expiry; " +
+      "remove it from the production environment (LEASE_DAYS governs production)."
+  );
+}

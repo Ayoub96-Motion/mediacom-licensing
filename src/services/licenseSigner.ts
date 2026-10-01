@@ -54,9 +54,18 @@ export function getPublicKeyPem(): string {
  * leaseUntil = min(now + LEASE_DAYS, expiresAt) — the offline grace window
  * a device trusts before it must call /refresh again, but NEVER extended
  * past the license's actual expiry.
+ *
+ * LEASE_MINUTES (env.leaseMinutesOverride), when set, takes precedence over
+ * LEASE_DAYS entirely — staging-only (env.ts refuses to load at all in
+ * production if it's set), for testing degraded-mode behavior in minutes
+ * instead of waiting out a real multi-day lease.
  */
 export function computeLeaseUntil(now: Date, expiresAt: Date | null): Date {
-  const leaseCandidate = new Date(now.getTime() + env.leaseDays * 24 * 60 * 60 * 1000);
+  const leaseMs =
+    env.leaseMinutesOverride !== undefined
+      ? env.leaseMinutesOverride * 60 * 1000
+      : env.leaseDays * 24 * 60 * 60 * 1000;
+  const leaseCandidate = new Date(now.getTime() + leaseMs);
   if (expiresAt && expiresAt.getTime() < leaseCandidate.getTime()) {
     return expiresAt;
   }
