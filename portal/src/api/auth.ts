@@ -1,8 +1,13 @@
 import { apiRequest } from "./client";
 import type { Customer } from "../types";
 
-export function requestMagicLink(email: string): Promise<{ message: string }> {
-  return apiRequest<{ message: string }>("/api/portal/auth/request-link", { method: "POST", body: { email } });
+// debugToken is only ever present when the API has TEST_EXPOSE_MAGIC_LINK=1
+// set (staging only, never production) — see src/routes/portalAuth.ts.
+export function requestMagicLink(email: string): Promise<{ message: string; debugToken?: string }> {
+  return apiRequest<{ message: string; debugToken?: string }>("/api/portal/auth/request-link", {
+    method: "POST",
+    body: { email },
+  });
 }
 
 export function verifyMagicLink(token: string): Promise<{ customer: Customer }> {

@@ -10,6 +10,14 @@ export function LoginPage() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Only ever populated when the API has TEST_EXPOSE_MAGIC_LINK=1 set
+  // (staging only — see src/routes/portalAuth.ts). Lets local/staging
+  // testing click straight through instead of digging the link out of
+  // server console output by hand, which is exactly the kind of manual
+  // copy-paste step that's easy to get subtly wrong (truncation, stray
+  // characters) and produce a "token invalid" that has nothing to do with
+  // the actual auth logic.
+  const [devShortcutUrl, setDevShortcutUrl] = useState<string | null>(null);
 
   if (!loading && customer) return <Navigate to="/" replace />;
 
@@ -22,7 +30,8 @@ export function LoginPage() {
       // the email is actually registered — see mediacom-licensing's
       // src/routes/portalAuth.ts. The UI reflects that: there is no
       // "that email doesn't exist" error state to show.
-      await requestMagicLink(email.trim());
+      const result = await requestMagicLink(email.trim());
+      setDevShortcutUrl(result.debugToken ? `/login/verify?token=${result.debugToken}` : null);
       setSent(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
@@ -38,6 +47,11 @@ export function LoginPage() {
           <h1>Check your email</h1>
           <p>If that email is registered, we've sent a login link to <strong>{email}</strong>.</p>
           <p className="muted">The link expires in 15 minutes and can only be used once.</p>
+          {devShortcutUrl && (
+            <p>
+              <a href={devShortcutUrl} className="link">Dev shortcut: open the login link now</a>
+            </p>
+          )}
           <button className="link" onClick={() => setSent(false)}>Use a different email</button>
         </div>
       </div>
