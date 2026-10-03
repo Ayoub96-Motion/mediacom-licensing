@@ -7,6 +7,10 @@ import { Loading, ErrorBox, EmptyState } from "../components/StateViews";
 import { Badge } from "../components/Badge";
 import { summarizeFeatures } from "../constants/tiers";
 import { isExpiringSoon, EXPIRING_SOON_DAYS } from "../lib/expiry";
+import { PageHeader } from "../components/PageHeader";
+import { AlertIcon, CheckCircleIcon, KeyIcon, SearchIcon } from "../components/Icons";
+
+const KeyIconSm = () => <KeyIcon size={15} />;
 
 const PAGE_SIZE = 20;
 const VALID_STATUSES: LicenseStatusFilter[] = ["active", "revoked", "expired", "expiring_soon"];
@@ -72,15 +76,18 @@ export function LicensesPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <h2>Licenses</h2>
-      </div>
+      <PageHeader
+        eyebrow="Licenses"
+        title="Licenses"
+        subtitle={`${total} license${total === 1 ? "" : "s"}`}
+      />
 
       {expiringSoonCount !== null && (
         <div className={`stat-banner ${expiringSoonCount === 0 ? "quiet" : ""}`}>
+          {expiringSoonCount === 0 ? <CheckCircleIcon size={16} /> : <AlertIcon size={16} />}
           {expiringSoonCount === 0
             ? `No licenses expiring in the next ${EXPIRING_SOON_DAYS} days.`
-            : `⚠ ${expiringSoonCount} license${expiringSoonCount === 1 ? "" : "s"} expiring in the next ${EXPIRING_SOON_DAYS} days.`}
+            : `${expiringSoonCount} license${expiringSoonCount === 1 ? "" : "s"} expiring in the next ${EXPIRING_SOON_DAYS} days.`}
           {expiringSoonCount > 0 && (
             <button
               className="link"
@@ -94,12 +101,16 @@ export function LicensesPage() {
       )}
 
       <div className="toolbar">
-        <input
-          type="text"
-          placeholder="Filter loaded page by customer name/email…"
-          value={customerFilter}
-          onChange={(e) => setCustomerFilter(e.target.value)}
-        />
+        <label className="search-input" style={{ margin: 0 }}>
+          <SearchIcon size={16} />
+          <input
+            type="text"
+            aria-label="Filter by customer"
+            placeholder="Filter loaded page by customer name/email…"
+            value={customerFilter}
+            onChange={(e) => setCustomerFilter(e.target.value)}
+          />
+        </label>
         <select value={status} onChange={(e) => { setPage(1); setStatus(e.target.value as LicenseStatusFilter | ""); }}>
           <option value="">All statuses</option>
           <option value="active">Active</option>
@@ -137,13 +148,18 @@ export function LicensesPage() {
                 return (
                   <tr key={lic.id} className="clickable" onClick={() => navigate(`/licenses/${lic.id}`)}>
                     <td>
-                      <div>{lic.customer.name}</div>
-                      <div style={{ fontSize: 11, color: "#9ca3af" }}>{lic.customer.email}</div>
+                      <div className="cell-with-icon">
+                        <span className="icon-badge sm"><KeyIconSm /></span>
+                        <div>
+                          <div className="cell-primary">{lic.customer.name}</div>
+                          <div className="cell-sub">{lic.customer.email}</div>
+                        </div>
+                      </div>
                     </td>
                     <td><Badge value={lic.status} /></td>
                     <td><Badge value={lic.type} /></td>
-                    <td style={{ fontSize: 12, color: "#4b5563" }}>{summarizeFeatures(lic.features)}</td>
-                    <td>{lic.deviceLimit} max</td>
+                    <td className="muted-text">{summarizeFeatures(lic.features)}</td>
+                    <td className="mono">{lic.deviceLimit} max</td>
                     <td>
                       {lic.expiresAt ? (
                         expiringSoon ? (

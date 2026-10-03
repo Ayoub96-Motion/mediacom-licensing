@@ -5,6 +5,7 @@ import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { CustomersPage } from "./pages/CustomersPage";
+import { PendingRequestsPage } from "./pages/PendingRequestsPage";
 import { CustomerDetailPage } from "./pages/CustomerDetailPage";
 import { LicensesPage } from "./pages/LicensesPage";
 import { LicenseDetailPage } from "./pages/LicenseDetailPage";
@@ -22,6 +23,7 @@ export default function App() {
               <Route path="/" element={<OverviewPage />} />
               <Route path="/customers" element={<CustomersPage />} />
               <Route path="/customers/:id" element={<CustomerDetailPage />} />
+              <Route path="/pending-requests" element={<PendingRequestsPage />} />
               <Route path="/licenses" element={<LicensesPage />} />
               <Route path="/licenses/:id" element={<LicenseDetailPage />} />
               <Route path="/releases" element={<ReleasesPage />} />

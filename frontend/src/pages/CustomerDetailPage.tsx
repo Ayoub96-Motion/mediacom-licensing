@@ -13,6 +13,8 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { summarizeFeatures } from "../constants/tiers";
 import { customerAuditLog } from "../api/auditLog";
 import type { AuditLogEntry } from "../types";
+import { TIER_FOR_TEAM_SIZE } from "../lib/teamSize";
+import { EditIcon, KeyIcon, MonitorIcon, PlusIcon, UsersIcon } from "../components/Icons";
 
 interface UpdateCustomerInput {
   name?: string;
@@ -124,13 +126,52 @@ export function CustomerDetailPage() {
   if (error) return <ErrorBox message={error} />;
   if (!customer) return <Loading />;
 
+  const isPending = customer.status === "pending";
+  const activeLicenses = customer.licenses.filter((l) => l.status === "active").length;
+  const activeDevices = devices?.filter((d) => !d.deactivatedAt).length;
+
   return (
     <div>
-      <div className="page-header">
-        <h2>{customer.name}</h2>
-        <div style={{ display: "flex", gap: 8 }}>
-          {!editing && <button onClick={() => setEditing(true)}>Edit</button>}
-          <button className="primary" onClick={() => setShowIssue(true)}>+ New License</button>
+      <div className="page-eyebrow"><Link to={isPending ? "/pending-requests" : "/customers"}>{isPending ? "Pending Requests" : "Customers"}</Link> / Detail</div>
+
+      <div className="card">
+        <div className="entity-header">
+          <span className="avatar lg">{customer.name.charAt(0).toUpperCase()}</span>
+          <div className="entity-main">
+            <div className="entity-title">
+              <h2>{customer.name}</h2>
+              <Badge value={customer.status} />
+            </div>
+            <div className="entity-meta">
+              {customer.company && <span>{customer.company}</span>}
+              <span>{customer.email}</span>
+              {customer.teamSize && <span>Team size {customer.teamSize}</span>}
+            </div>
+          </div>
+          <div className="page-actions">
+            {!editing && <button onClick={() => setEditing(true)}><EditIcon size={15} /> Edit</button>}
+            <button className="primary" onClick={() => setShowIssue(true)}>
+              <PlusIcon size={16} /> {isPending ? "Approve → Issue License" : "New License"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="stat-cards three">
+        <div className="stat-card">
+          <div className="stat-top"><span className="icon-badge"><KeyIcon /></span></div>
+          <div className="stat-value">{customer.licenses.length}</div>
+          <div className="stat-label">Licenses · {activeLicenses} active</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-top"><span className="icon-badge neutral"><MonitorIcon /></span></div>
+          <div className="stat-value">{activeDevices ?? "—"}</div>
+          <div className="stat-label">Active devices</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-top"><span className="icon-badge dark"><UsersIcon /></span></div>
+          <div className="stat-value">{customer.teamSize ?? "—"}</div>
+          <div className="stat-label">Team size</div>
         </div>
       </div>
 
@@ -189,7 +230,7 @@ export function CustomerDetailPage() {
       <div className="card">
         <h3>Licenses</h3>
         {customer.licenses.length === 0 ? (
-          <p style={{ fontSize: 13, color: "#6b7280" }}>No licenses yet.</p>
+          <p className="muted-text">No licenses yet.</p>
         ) : (
           <table>
             <thead>
@@ -205,8 +246,8 @@ export function CustomerDetailPage() {
                 <tr key={lic.id} className="clickable" onClick={() => navigate(`/licenses/${lic.id}`)}>
                   <td><Badge value={lic.status} /></td>
                   <td><Badge value={lic.type} /></td>
-                  <td style={{ fontSize: 12, color: "#4b5563" }}>{summarizeFeatures(lic.features)}</td>
-                  <td>{lic.expiresAt ? new Date(lic.expiresAt).toLocaleDateString() : "Never"}</td>
+                  <td className="muted-text">{summarizeFeatures(lic.features)}</td>
+                  <td className="cell-mono">{lic.expiresAt ? new Date(lic.expiresAt).toLocaleDateString() : "Never"}</td>
                 </tr>
               ))}
             </tbody>
@@ -235,17 +276,23 @@ export function CustomerDetailPage() {
               {devices.map((device) => (
                 <tr key={device.id}>
                   <td>
-                    {device.label || <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{device.fingerprint}</span>}
+                    <div className="cell-with-icon">
+                      <span className="icon-badge sm neutral"><MonitorIcon size={15} /></span>
+                      <div>
+                        <div className="cell-primary">{device.label || device.machineName || "Unnamed device"}</div>
+                        <div className="cell-mono">{device.fingerprint}</div>
+                      </div>
+                    </div>
                   </td>
                   <td>
                     <Link to={`/licenses/${device.license.id}`}>
-                      <Badge value={device.license.status} /> <span style={{ fontSize: 12 }}>{device.license.type}</span>
+                      <Badge value={device.license.status} /> <span className="small-muted">{device.license.type}</span>
                     </Link>
                   </td>
-                  <td>{new Date(device.activatedAt).toLocaleString()}</td>
-                  <td>{new Date(device.lastSeenAt).toLocaleString()}</td>
+                  <td className="cell-mono">{new Date(device.activatedAt).toLocaleString()}</td>
+                  <td className="cell-mono">{new Date(device.lastSeenAt).toLocaleString()}</td>
                   <td className="device-row-actions">
-                    <button onClick={() => setDeviceToDeactivate(device)}>Deactivate</button>
+                    <button className="danger" onClick={() => setDeviceToDeactivate(device)}>Deactivate</button>
                   </td>
                 </tr>
               ))}
@@ -254,7 +301,7 @@ export function CustomerDetailPage() {
         )}
       </div>
 
-      <div className="card">
+      <div className="card timeline-card">
         <h3>Activity</h3>
         {activityError && <ErrorBox message={activityError} />}
         {!activityError && activity === null && <Loading />}
@@ -276,6 +323,7 @@ export function CustomerDetailPage() {
       {showIssue && (
         <IssueLicenseModal
           customer={customer}
+          initialTier={customer.teamSize ? TIER_FOR_TEAM_SIZE[customer.teamSize] : undefined}
           onCancel={() => setShowIssue(false)}
           onDone={() => {
             setShowIssue(false);

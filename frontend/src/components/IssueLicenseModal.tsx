@@ -3,17 +3,21 @@ import { createLicense } from "../api/licenses";
 import { ApiError } from "../api/client";
 import type { Customer, Entitlements, LicenseType, TierPresetName } from "../types";
 import { TIER_PRESETS, summarizeFeatures } from "../constants/tiers";
+import { CheckCircleIcon } from "./Icons";
 
 interface IssueLicenseModalProps {
   customer: Customer;
   onDone: () => void;
   onCancel: () => void;
+  // Pre-selected tier — the Pending Requests page derives it from the
+  // customer's self-reported team size. Defaults to "starter".
+  initialTier?: TierPresetName;
 }
 
 const TIERS: TierPresetName[] = ["starter", "studio", "enterprise"];
 
-export function IssueLicenseModal({ customer, onDone, onCancel }: IssueLicenseModalProps) {
-  const [tier, setTier] = useState<TierPresetName | "custom">("starter");
+export function IssueLicenseModal({ customer, onDone, onCancel, initialTier = "starter" }: IssueLicenseModalProps) {
+  const [tier, setTier] = useState<TierPresetName | "custom">(initialTier);
   const [customFeatures, setCustomFeatures] = useState<Entitlements>({
     maxLocations: 1,
     maxRoomsPerLocation: 1,
@@ -80,7 +84,7 @@ export function IssueLicenseModal({ customer, onDone, onCancel }: IssueLicenseMo
           </div>
           <div className="raw-key-box">{rawKey}</div>
           <button type="button" onClick={copyKey} style={{ width: "100%", marginBottom: 16 }}>
-            {copied ? "Copied ✓" : "Copy to clipboard"}
+            {copied ? <><CheckCircleIcon size={15} /> Copied</> : "Copy to clipboard"}
           </button>
           <div className="checkbox-row">
             <input
@@ -130,7 +134,7 @@ export function IssueLicenseModal({ customer, onDone, onCancel }: IssueLicenseMo
         </div>
 
         {tier === "custom" && (
-          <div className="card" style={{ boxShadow: "none", border: "1px solid #e5e7eb", padding: 14, marginBottom: 14 }}>
+          <div className="inset-panel">
             <div className="field-row">
               <div className="field">
                 <label htmlFor="f-locations">Max Locations</label>

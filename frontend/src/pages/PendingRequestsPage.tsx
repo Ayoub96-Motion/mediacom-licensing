@@ -4,30 +4,36 @@ import { listCustomers } from "../api/customers";
 import { ApiError } from "../api/client";
 import type { CustomerListItem } from "../types";
 import { Loading, ErrorBox, EmptyState } from "../components/StateViews";
-import { AddCustomerModal } from "../components/AddCustomerModal";
-import { Badge } from "../components/Badge";
+import { IssueLicenseModal } from "../components/IssueLicenseModal";
 import { PageHeader } from "../components/PageHeader";
-import { PlusIcon, SearchIcon } from "../components/Icons";
+import { SearchIcon } from "../components/Icons";
+import { TIER_FOR_TEAM_SIZE } from "../lib/teamSize";
 
 const PAGE_SIZE = 20;
 
-export function CustomersPage() {
+/**
+ * Request-access signups from the public landing page (status "pending").
+ * Approving one = issuing its first license through the usual
+ * IssueLicenseModal — the backend flips the customer to "active" as part of
+ * that same POST /admin/licenses call, so it drops off this list on reload.
+ */
+export function PendingRequestsPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState<CustomerListItem[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
+  const [approving, setApproving] = useState<CustomerListItem | null>(null);
 
   async function load() {
     setError(null);
     try {
-      const result = await listCustomers({ q: search || undefined, page, pageSize: PAGE_SIZE });
+      const result = await listCustomers({ status: "pending", q: search || undefined, page, pageSize: PAGE_SIZE });
       setItems(result.items);
       setTotal(result.total);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load customers");
+      setError(err instanceof ApiError ? err.message : "Could not load pending requests");
     }
   }
 
@@ -42,9 +48,8 @@ export function CustomersPage() {
     <div>
       <PageHeader
         eyebrow="Customers"
-        title="Customers"
-        subtitle={`${total} customer${total === 1 ? "" : "s"}`}
-        actions={<button className="primary" onClick={() => setShowAdd(true)}><PlusIcon size={16} /> Add customer</button>}
+        title="Pending Requests"
+        subtitle="Access requests from the public signup form, waiting for a license"
       />
 
       <div className="toolbar">
@@ -65,7 +70,7 @@ export function CustomersPage() {
 
       {error && <ErrorBox message={error} />}
       {!error && items === null && <Loading />}
-      {!error && items !== null && items.length === 0 && <EmptyState label="No customers found." />}
+      {!error && items !== null && items.length === 0 && <EmptyState label="No pending access requests." />}
 
       {!error && items !== null && items.length > 0 && (
         <>
@@ -75,9 +80,9 @@ export function CustomersPage() {
                 <th>Name</th>
                 <th>Company</th>
                 <th>Email</th>
-                <th>Status</th>
-                <th># Licenses</th>
-                <th>Created</th>
+                <th>Team Size</th>
+                <th>Requested</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -91,9 +96,19 @@ export function CustomersPage() {
                   </td>
                   <td>{c.company || "—"}</td>
                   <td className="muted-text">{c.email}</td>
-                  <td><Badge value={c.status} /></td>
-                  <td className="mono">{c.licenseCount}</td>
+                  <td>{c.teamSize ? <span className="badge">{c.teamSize}</span> : "—"}</td>
                   <td className="cell-mono">{new Date(c.createdAt).toLocaleDateString()}</td>
+                  <td className="row-actions">
+                    <button
+                      className="primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setApproving(c);
+                      }}
+                    >
+                      Approve → Issue License
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -109,12 +124,14 @@ export function CustomersPage() {
         </>
       )}
 
-      {showAdd && (
-        <AddCustomerModal
-          onCancel={() => setShowAdd(false)}
-          onCreated={(customer) => {
-            setShowAdd(false);
-            navigate(`/customers/${customer.id}`);
+      {approving && (
+        <IssueLicenseModal
+          customer={approving}
+          initialTier={approving.teamSize ? TIER_FOR_TEAM_SIZE[approving.teamSize] : undefined}
+          onCancel={() => setApproving(null)}
+          onDone={() => {
+            setApproving(null);
+            load();
           }}
         />
       )}

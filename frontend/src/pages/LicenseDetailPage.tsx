@@ -12,6 +12,7 @@ import { formatFeatureCount } from "../constants/tiers";
 import { licenseAuditLog } from "../api/auditLog";
 import type { AuditLogEntry } from "../types";
 import { formatDaysUntil, isExpiringSoon } from "../lib/expiry";
+import { BanIcon, ClockIcon, EditIcon, KeyIcon, MonitorIcon, UsersIcon } from "../components/Icons";
 
 export function LicenseDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -99,24 +100,57 @@ export function LicenseDetailPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h2>License</h2>
-          <div style={{ fontSize: 13, color: "#6b7280" }}>
-            <Link to={`/customers/${license.customer.id}`}>{license.customer.name}</Link> · {license.customer.email}
+      <div className="page-eyebrow"><Link to="/licenses">Licenses</Link> / Detail</div>
+
+      <div className="card">
+        <div className="entity-header">
+          <span className="icon-badge dark" style={{ width: 52, height: 52, borderRadius: 16 }}><KeyIcon size={22} /></span>
+          <div className="entity-main">
+            <div className="entity-title">
+              <h2>License</h2>
+              <Badge value={license.status} />
+              <Badge value={license.type} />
+            </div>
+            <div className="entity-meta">
+              <span><Link to={`/customers/${license.customer.id}`}>{license.customer.name}</Link></span>
+              <span>{license.customer.email}</span>
+              <span className="mono">{license.id}</span>
+            </div>
           </div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
           {license.status !== "revoked" && (
-            <>
-              <button onClick={() => setShowEdit(true)}>Edit</button>
-              <button className="danger" onClick={() => setShowRevokeConfirm(true)}>Revoke</button>
-            </>
+            <div className="page-actions">
+              <button onClick={() => setShowEdit(true)}><EditIcon size={15} /> Edit</button>
+              <button className="danger" onClick={() => setShowRevokeConfirm(true)}><BanIcon size={15} /> Revoke</button>
+            </div>
           )}
         </div>
       </div>
 
       {actionError && <ErrorBox message={actionError} />}
+
+      <div className="stat-cards three">
+        <div className="stat-card">
+          <div className="stat-top"><span className="icon-badge"><MonitorIcon /></span></div>
+          {/* activeCount, not license.devices.length — that counts
+              deactivated devices too, which don't hold a seat. */}
+          <div className="stat-value">{activeCount}<small>/ {license.deviceLimit}</small></div>
+          <div className="stat-label">Devices in use</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-top"><span className="icon-badge neutral"><UsersIcon /></span></div>
+          <div className="stat-value">{formatFeatureCount(f.maxUsers)}</div>
+          <div className="stat-label">Max users</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-top">
+            <span className={`icon-badge ${isExpiringSoon(license.expiresAt, license.status) ? "warning" : "dark"}`}><ClockIcon /></span>
+          </div>
+          <div className="stat-value" style={{ fontSize: 22 }}>
+            {license.expiresAt ? new Date(license.expiresAt).toLocaleDateString() : "Never"}
+          </div>
+          <div className="stat-label">{license.expiresAt ? formatDaysUntil(license.expiresAt) : "Perpetual"}</div>
+        </div>
+      </div>
 
       <div className="card">
         <h3>Details</h3>
@@ -197,7 +231,7 @@ export function LicenseDetailPage() {
         {activationsError && <ErrorBox message={activationsError} />}
         {!activationsError && activations === null && <Loading />}
         {!activationsError && activations !== null && activations.length === 0 && (
-          <p style={{ fontSize: 13, color: "#6b7280" }}>No devices activated yet.</p>
+          <p className="muted-text">No devices activated yet.</p>
         )}
         {!activationsError && activations !== null && activations.length > 0 && (
           <table>
@@ -218,18 +252,23 @@ export function LicenseDetailPage() {
                   <td>
                     <Badge value={device.status} />
                     {device.status === "deactivated" && device.deactivatedAt && (
-                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                      <div className="cell-sub">
                         {new Date(device.deactivatedAt).toLocaleDateString()}
                       </div>
                     )}
                   </td>
-                  <td>{device.label || "—"}</td>
-                  <td style={{ fontFamily: "ui-monospace, monospace", fontSize: 12 }}>{device.fingerprint}</td>
-                  <td>{new Date(device.activatedAt).toLocaleString()}</td>
-                  <td>{new Date(device.lastSeenAt).toLocaleString()}</td>
+                  <td>
+                    <div className="cell-with-icon">
+                      <span className="icon-badge sm neutral"><MonitorIcon size={15} /></span>
+                      <span className="cell-primary">{device.label || device.machineName || "Unnamed device"}</span>
+                    </div>
+                  </td>
+                  <td className="cell-mono">{device.fingerprint}</td>
+                  <td className="cell-mono">{new Date(device.activatedAt).toLocaleString()}</td>
+                  <td className="cell-mono">{new Date(device.lastSeenAt).toLocaleString()}</td>
                   <td className="device-row-actions">
                     {device.status === "active" && (
-                      <button onClick={() => setDeviceToDeactivate(device)}>Deactivate</button>
+                      <button className="danger" onClick={() => setDeviceToDeactivate(device)}>Deactivate</button>
                     )}
                   </td>
                 </tr>
@@ -239,7 +278,7 @@ export function LicenseDetailPage() {
         )}
       </div>
 
-      <div className="card">
+      <div className="card timeline-card">
         <h3>Activity</h3>
         {activityError && <ErrorBox message={activityError} />}
         {!activityError && activity === null && <Loading />}

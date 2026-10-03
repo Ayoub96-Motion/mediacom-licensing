@@ -1,9 +1,15 @@
 import { apiRequest } from "./client";
-import type { Customer, CustomerListItem, CustomerWithLicenses, DeviceWithLicense, Paginated } from "../types";
+import type { Customer, CustomerListItem, CustomerStatus, CustomerWithLicenses, DeviceWithLicense, Paginated } from "../types";
 
-export function listCustomers(params: { q?: string; page?: number; pageSize?: number }): Promise<Paginated<CustomerListItem>> {
+export function listCustomers(params: {
+  q?: string;
+  status?: CustomerStatus;
+  page?: number;
+  pageSize?: number;
+}): Promise<Paginated<CustomerListItem>> {
   const qs = new URLSearchParams();
   if (params.q) qs.set("q", params.q);
+  if (params.status) qs.set("status", params.status);
   if (params.page) qs.set("page", String(params.page));
   if (params.pageSize) qs.set("pageSize", String(params.pageSize));
   return apiRequest<Paginated<CustomerListItem>>(`/admin/customers?${qs.toString()}`);

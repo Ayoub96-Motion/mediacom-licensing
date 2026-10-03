@@ -7,6 +7,8 @@ import { Badge } from "../components/Badge";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { UploadReleaseModal } from "../components/UploadReleaseModal";
 import { EditReleaseModal } from "../components/EditReleaseModal";
+import { PageHeader } from "../components/PageHeader";
+import { PackageIcon, UploadIcon } from "../components/Icons";
 
 const PAGE_SIZE = 20;
 
@@ -73,10 +75,12 @@ export function ReleasesPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <h2>Releases</h2>
-        <button className="primary" onClick={() => setShowUpload(true)}>Upload Release</button>
-      </div>
+      <PageHeader
+        eyebrow="Releases"
+        title="Releases"
+        subtitle="Installers and app-store links shown in the customer portal"
+        actions={<button className="primary" onClick={() => setShowUpload(true)}><UploadIcon size={16} /> Upload release</button>}
+      />
 
       <div className="toolbar">
         <select value={product} onChange={(e) => { setPage(1); setProduct(e.target.value as ReleaseProduct | ""); }}>
@@ -109,11 +113,16 @@ export function ReleasesPage() {
             <tbody>
               {items.map((release) => (
                 <tr key={release.id}>
-                  <td>{release.product}</td>
-                  <td>{release.version}</td>
+                  <td>
+                    <div className="cell-with-icon">
+                      <span className="icon-badge sm dark"><PackageIcon size={15} /></span>
+                      <span className="cell-primary">{release.product}</span>
+                    </div>
+                  </td>
+                  <td className="mono">{release.version}</td>
                   <td><Badge value={release.channel} /></td>
                   <td>{release.externalUrl ? "link" : formatSize(release.fileSize)}</td>
-                  <td style={{ fontFamily: "monospace", fontSize: 11 }}>
+                  <td className="cell-mono">
                     {release.sha256 ? `${release.sha256.slice(0, 10)}…` : "—"}
                   </td>
                   <td>
@@ -125,10 +134,11 @@ export function ReleasesPage() {
                       {release.isPublished ? "Unpublish" : "Publish"}
                     </button>
                   </td>
-                  <td>{new Date(release.createdAt).toLocaleDateString()}</td>
-                  <td>
+                  <td className="cell-mono">{new Date(release.createdAt).toLocaleDateString()}</td>
+                  <td className="row-actions">
                     <button onClick={() => setEditing(release)}>Edit</button>{" "}
                     <button
+                      className="danger"
                       disabled={release.isPublished || busyId === release.id}
                       title={release.isPublished ? "Unpublish before deleting" : undefined}
                       onClick={() => setConfirmDelete(release)}

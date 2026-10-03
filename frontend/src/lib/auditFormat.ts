@@ -18,6 +18,9 @@ const ACTION_LABELS: Record<string, string> = {
   "customer.login": "Logged in to portal",
   "customer.license.reveal_key": "Revealed license key",
   "customer.device.deactivate": "Deactivated device (self-service)",
+  "customer.signup_request": "Requested access",
+  "customer.signup_request.update": "Re-submitted access request",
+  "customer.approve": "Approved access request",
 };
 
 export function actionLabel(action: string): string {
@@ -84,7 +87,7 @@ export function summarizeEntry(entry: AuditLogEntry): string {
       return `Revoked (was ${m.previousStatus})`;
 
     case "device.deactivate":
-      return `Deactivated "${m.label || m.fingerprint}"${m.method ? ` (${m.method})` : ""}`;
+      return `Deactivated ${m.label || m.fingerprint ? `"${m.label || m.fingerprint}"` : "a device"}${m.method ? ` (${m.method})` : ""}`;
 
     case "device.activate":
       return `Activated${m.machineName ? ` "${m.machineName}"` : ""}`;
@@ -116,6 +119,13 @@ export function summarizeEntry(entry: AuditLogEntry): string {
 
     case "customer.device.deactivate":
       return "Customer deactivated one of their own devices";
+
+    case "customer.signup_request":
+    case "customer.signup_request.update":
+      return `${m.name} (${m.email}) from ${m.company}, team size ${m.teamSize}`;
+
+    case "customer.approve":
+      return "Approved by issuing their first license";
 
     default:
       return JSON.stringify(m);

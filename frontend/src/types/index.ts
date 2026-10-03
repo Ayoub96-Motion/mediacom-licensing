@@ -17,6 +17,10 @@ export type LicenseStatus = "active" | "revoked" | "expired";
 // GET /admin/licenses — not a real status any License row ever has.
 export type LicenseStatusFilter = LicenseStatus | "expiring_soon";
 
+export type CustomerStatus = "active" | "pending";
+// Self-reported on the public request-access form; null for admin-created customers.
+export type TeamSize = "1-15" | "16-50" | "50+";
+
 export interface Customer {
   id: string;
   name: string;
@@ -24,6 +28,10 @@ export interface Customer {
   email: string;
   phone: string | null;
   createdAt: string;
+  // "pending" = an unapproved request-access signup; issuing its first
+  // license flips it to "active" (backend: src/routes/adminLicenses.ts).
+  status: CustomerStatus;
+  teamSize: TeamSize | null;
 }
 
 // GET /admin/customers list items only — adds licenseCount (see backend addition)
@@ -38,6 +46,9 @@ export interface Device {
   activatedAt: string;
   lastSeenAt: string;
   label: string | null;
+  // Set by the /api/device/* activation flow (label is the legacy shim's
+  // field) — the API always returned it; the dashboard just never showed it.
+  machineName: string | null;
   // Soft-delete (Phase 1) — null while active. Was missing from this type
   // entirely before; the field always existed on the backend.
   deactivatedAt: string | null;
@@ -131,7 +142,12 @@ export type AuditAction =
   // Phase 4 portal actions — all actorType 'customer', no admin.
   | "customer.login"
   | "customer.license.reveal_key"
-  | "customer.device.deactivate";
+  | "customer.device.deactivate"
+  // Public request-access form — actorType 'customer', no admin.
+  | "customer.signup_request"
+  | "customer.signup_request.update"
+  // Admin issuing a pending customer's first license.
+  | "customer.approve";
 
 export type AuditTargetType = "License" | "Customer" | "Device" | "Release";
 export type AuditActorType = "admin" | "customer" | "device";

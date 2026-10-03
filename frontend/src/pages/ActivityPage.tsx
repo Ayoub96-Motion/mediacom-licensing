@@ -4,6 +4,7 @@ import { ApiError } from "../api/client";
 import type { AuditLogEntry, AuditTargetType } from "../types";
 import { Loading, ErrorBox } from "../components/StateViews";
 import { ActivityList } from "../components/ActivityList";
+import { PageHeader } from "../components/PageHeader";
 
 const PAGE_SIZE = 30;
 
@@ -34,9 +35,11 @@ export function ActivityPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <h2>Activity</h2>
-      </div>
+      <PageHeader
+        eyebrow="System"
+        title="Audit Log"
+        subtitle={`${total} recorded event${total === 1 ? "" : "s"} — admin, customer and device actions`}
+      />
 
       <div className="toolbar">
         <select value={targetType} onChange={(e) => { setPage(1); setTargetType(e.target.value as AuditTargetType | ""); }}>
@@ -49,7 +52,11 @@ export function ActivityPage() {
 
       {error && <ErrorBox message={error} />}
       {!error && items === null && <Loading />}
-      {!error && items !== null && <ActivityList entries={items} />}
+      {!error && items !== null && (
+        <div className="card timeline-card">
+          <ActivityList entries={items} />
+        </div>
+      )}
 
       {!error && items !== null && totalPages > 1 && (
         <div className="pagination">
