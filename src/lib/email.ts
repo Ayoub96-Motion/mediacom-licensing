@@ -80,3 +80,37 @@ export async function sendMagicLinkEmail(params: SendMagicLinkEmailParams): Prom
       `If you didn't request this, you can safely ignore this email.`,
   });
 }
+
+export interface SendSignupRequestNotificationParams {
+  to: string[];
+  name: string;
+  email: string;
+  company: string;
+  teamSize: string;
+}
+
+/**
+ * Tells admins a new request-access signup is waiting in the dashboard's
+ * Pending Requests list. Goes through the same stubbed provider as every
+ * other email here — until a real provider is wired in above, this only
+ * logs (the `[email:stub]` line is the notification in dev/staging).
+ */
+export async function sendSignupRequestNotification(params: SendSignupRequestNotificationParams): Promise<void> {
+  // TODO(email-provider): no real provider yet — see the header comment.
+  if (params.to.length === 0) {
+    console.warn("[signup-request] no admin users to notify — new pending request:", params.email);
+    return;
+  }
+  await Promise.all(
+    params.to.map((to) =>
+      provider.send({
+        to,
+        subject: `New MediaCom access request: ${params.company}`,
+        text:
+          `${params.name} <${params.email}> requested access.\n\n` +
+          `Company: ${params.company}\nTeam size: ${params.teamSize}\n\n` +
+          `Review it under Pending Requests in the admin dashboard.`,
+      })
+    )
+  );
+}

@@ -29,17 +29,20 @@ adminCustomersRouter.post(
 adminCustomersRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { q, page, pageSize } = listCustomersQuerySchema.parse(req.query);
+    const { q, status, page, pageSize } = listCustomersQuerySchema.parse(req.query);
 
-    const where = q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" as const } },
-            { email: { contains: q, mode: "insensitive" as const } },
-            { company: { contains: q, mode: "insensitive" as const } },
-          ],
-        }
-      : {};
+    const where = {
+      ...(status ? { status } : {}),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" as const } },
+              { email: { contains: q, mode: "insensitive" as const } },
+              { company: { contains: q, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
 
     const [rows, total] = await Promise.all([
       prisma.customer.findMany({

@@ -33,7 +33,10 @@ portalAuthRouter.post(
     }
 
     const customer = await prisma.customer.findUnique({ where: { email } });
-    if (!customer) {
+    // A "pending" customer is an unapproved request-access signup
+    // (src/routes/publicSignup.ts) — indistinguishable from "not registered"
+    // until an admin issues them a license.
+    if (!customer || customer.status !== "active") {
       res.json({ message: GENERIC_MESSAGE });
       return;
     }

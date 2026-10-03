@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
-// Starts the licensing API, admin dashboard, and customer portal together
+// Starts the licensing API, admin dashboard, customer portal, and public
+// landing page together
 // for local development — all three pointed at the staging database/secrets
 // (see .env.staging). Never touches the main/production DB; see
 // docs/RUNNING-LOCALLY.md for the full setup (including the staging MySQL
@@ -16,10 +17,12 @@ const ROOT = path.resolve(__dirname, '..');
 const API_URL = 'http://localhost:4100';
 const ADMIN_URL = 'http://localhost:5173';
 const PORTAL_URL = 'http://localhost:5175';
+const LANDING_URL = 'http://localhost:5174';
 
 console.log('');
 console.log(`  Admin:  ${ADMIN_URL}`);
 console.log(`  Portal: ${PORTAL_URL}`);
+console.log(`  Landing: ${LANDING_URL}`);
 console.log(`  API:    ${API_URL}`);
 console.log('');
 
@@ -50,6 +53,15 @@ const { result } = concurrently(
       cwd: path.join(ROOT, 'portal'),
       env: { VITE_API_BASE_URL: API_URL },
       prefixColor: 'magenta',
+    },
+    {
+      // landing's own "dev" script pins --port 5174 (matching LANDING_URL,
+      // which the API's CORS for /public/signup-request defaults to).
+      name: 'landing',
+      command: 'npm run dev -- --strictPort',
+      cwd: path.join(ROOT, 'landing'),
+      env: { VITE_API_BASE_URL: API_URL, VITE_PORTAL_URL: PORTAL_URL, VITE_ADMIN_URL: ADMIN_URL },
+      prefixColor: 'yellow',
     },
   ],
   {

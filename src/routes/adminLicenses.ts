@@ -62,6 +62,20 @@ adminLicensesRouter.post(
       expiresAt: license.expiresAt ? license.expiresAt.toISOString() : null,
     });
 
+    // Issuing a license IS the approval of a pending request-access signup
+    // (src/routes/publicSignup.ts) — the dashboard's Pending Requests
+    // "Approve → Issue License" button goes through this same endpoint.
+    if (customer.status === "pending") {
+      await prisma.customer.update({ where: { id: customer.id }, data: { status: "active" } });
+      await logAction({
+        adminId: req.admin!.sub,
+        action: "customer.approve",
+        targetType: "Customer",
+        targetId: customer.id,
+        metadata: { licenseId: license.id },
+      });
+    }
+
     // Never the raw key — only what tier/features were issued, and to whom.
     await logAction({
       adminId: req.admin!.sub,

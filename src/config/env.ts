@@ -59,6 +59,12 @@ export const env = {
   customerSessionDays: Number(process.env.CUSTOMER_SESSION_DAYS ?? 14),
   magicLinkTtlMinutes: Number(process.env.MAGIC_LINK_TTL_MINUTES ?? 15),
   portalUrl: process.env.PORTAL_URL ?? "http://localhost:5175",
+
+  // Public landing page (landing/) — the only browser origin allowed to call
+  // POST /public/signup-request, and (alongside portalUrl) the only other
+  // origin allowed to call POST /api/portal/auth/request-link, for its
+  // /login page. See src/app.ts.
+  landingUrl: process.env.LANDING_URL ?? "http://localhost:5174",
 };
 
 // Checked eagerly (crashes at startup, not lazily at first sign()) — a

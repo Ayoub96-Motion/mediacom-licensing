@@ -50,3 +50,17 @@ export const magicLinkIpRateLimit = rateLimit({
     res.status(429).json(errorBody("rate_limited", "Too many requests, please try again later"));
   },
 });
+
+// Public request-access form (POST /public/signup-request) — same budget as
+// publicLicenseRateLimit above, but its own instance (and so its own
+// per-IP counter): sharing one would let a few signups eat into a
+// customer's /activate quota from the same office IP, and vice versa.
+export const publicSignupRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json(errorBody("rate_limited", "Too many requests, please try again later"));
+  },
+});

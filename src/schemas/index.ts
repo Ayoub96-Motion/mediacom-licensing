@@ -53,6 +53,7 @@ export const updateCustomerSchema = z.object({
 
 export const listCustomersQuerySchema = z.object({
   q: z.string().optional(),
+  status: z.enum(["active", "pending"]).optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(20),
 });
@@ -142,6 +143,16 @@ export const portalDownloadQuerySchema = z.object({
 // ── Phase 4: customer portal auth ────────────────────────────────────────────
 export const magicLinkRequestSchema = z.object({
   email: z.string().email(),
+});
+
+// ── Public landing page: request-access form ─────────────────────────────────
+export const TEAM_SIZES = ["1-15", "16-50", "50+"] as const;
+
+export const signupRequestSchema = z.object({
+  name: z.string().trim().min(1).max(191),
+  email: z.string().trim().toLowerCase().email().max(191),
+  company: z.string().trim().min(1).max(191),
+  teamSize: z.enum(TEAM_SIZES),
 });
 
 export const magicLinkVerifySchema = z.object({

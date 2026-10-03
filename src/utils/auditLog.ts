@@ -25,7 +25,12 @@ export type AuditAction =
   // with a real consequence or that reveal something sensitive).
   | "customer.login"
   | "customer.license.reveal_key"
-  | "customer.device.deactivate";
+  | "customer.device.deactivate"
+  // Public request-access form (actorType 'customer', no adminId), and the
+  // admin approving one by issuing its first license.
+  | "customer.signup_request"
+  | "customer.signup_request.update"
+  | "customer.approve";
 
 export type AuditTargetType = "License" | "Customer" | "Device" | "Release";
 export type AuditActorType = "admin" | "customer" | "device";

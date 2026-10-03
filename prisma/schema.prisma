@@ -12,6 +12,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// "pending" = created by the public landing page's request-access form
+// (POST /public/signup-request) and not yet approved. Approval is implicit:
+// issuing a pending customer's first license (POST /admin/licenses) flips
+// them to "active". Every pre-existing row was migrated to "active".
+enum CustomerStatus {
+  active
+  pending
+}
+
 model Customer {
   id        String   @id @default(cuid())
   name      String
@@ -20,11 +29,18 @@ model Customer {
   phone     String?
   createdAt DateTime @default(now())
 
+  status CustomerStatus @default(active)
+  // Self-reported on the request-access form ("1-15" | "16-50" | "50+") —
+  // null for admin-created customers. Used only to pre-select a tier when
+  // an admin approves the request.
+  teamSize String?
+
   licenses         License[]
   magicLinkTokens  MagicLinkToken[]
   portalSessions   PortalSession[]
 
   @@index([email])
+  @@index([status])
 }
 
 // Server-side portal sessions (replaces the stateless-JWT cookie — a

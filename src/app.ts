@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { env } from "./config/env";
 import { publicRouter } from "./routes/public";
+import { publicSignupRouter } from "./routes/publicSignup";
 import { apiDeviceRouter } from "./routes/apiDevice";
 import { adminAuthRouter } from "./routes/adminAuth";
 import { adminCustomersRouter } from "./routes/adminCustomers";
@@ -32,6 +33,11 @@ export function createApp() {
   // prefix and new endpoints. See routes/apiDevice.ts.
   app.use("/api/device", apiDeviceRouter);
 
+  // Public landing page (landing/) — unlike the two routers above, this one
+  // IS called from a browser, so it needs CORS for the landing page's
+  // origin. No credentials: the request-access form is anonymous.
+  app.use("/public", cors({ origin: env.landingUrl }), publicSignupRouter);
+
   // Phase 4: customer portal — browser app, session cookie based (see
   // middleware/portalAuth.ts, services/portalSession.ts). Needs its own CORS
   // instance with credentials:true (cookies aren't sent cross-origin
@@ -50,7 +56,18 @@ export function createApp() {
     next();
   };
 
-  app.use("/api/portal/auth", portalCors, noReferrer, portalAuthRouter);
+  // The landing page's /login reuses this same magic-link flow (the emailed
+  // link still lands on the portal, which is what actually signs the
+  // customer in) — so /request-link alone also accepts the landing origin.
+  // Every other portal route stays portal-origin-only.
+  const portalAuthCors = cors<express.Request>((req, callback) =>
+    callback(null, {
+      origin: req.path === "/request-link" ? [env.portalUrl, env.landingUrl] : env.portalUrl,
+      credentials: true,
+    })
+  );
+
+  app.use("/api/portal/auth", portalAuthCors, noReferrer, portalAuthRouter);
   // portalReleasesRouter's own /:id/download route intentionally isn't
   // behind requirePortalSession (see its comment — a signed token in the
   // URL is its credential, for a plain browser navigation/download, not an
