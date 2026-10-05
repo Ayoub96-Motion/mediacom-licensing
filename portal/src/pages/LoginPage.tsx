@@ -3,6 +3,8 @@ import { Navigate } from "react-router-dom";
 import { requestMagicLink } from "../api/auth";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { AuthShell } from "../components/AuthShell";
+import { AlertCircleIcon, ArrowRightIcon, MailIcon } from "../components/Icons";
 
 export function LoginPage() {
   const { customer, loading } = useAuth();
@@ -42,39 +44,44 @@ export function LoginPage() {
 
   if (sent) {
     return (
-      <div className="auth-shell">
-        <div className="auth-card">
-          <h1>Check your email</h1>
-          <p>If that email is registered, we've sent a login link to <strong>{email}</strong>.</p>
-          <p className="muted">The link expires in 15 minutes and can only be used once.</p>
+      <AuthShell>
+        <h1>Check your email</h1>
+        <p>If that email is registered, we've sent a login link to <strong>{email}</strong>.</p>
+        <p className="auth-dark-note">The link expires in 15 minutes and can only be used once.</p>
+        <div className="auth-dark-links">
           {devShortcutUrl && (
-            <p>
-              <a href={devShortcutUrl} className="link">Dev shortcut: open the login link now</a>
-            </p>
+            <a href={devShortcutUrl} className="auth-dark-link">Dev shortcut: open the login link now</a>
           )}
-          <button className="link" onClick={() => setSent(false)}>Use a different email</button>
+          <button type="button" className="auth-dark-link" onClick={() => setSent(false)}>Use a different email</button>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="auth-shell">
-      <form className="auth-card" onSubmit={handleSubmit}>
-        <h1>MediaCom Portal</h1>
-        <p className="muted">Enter your email and we'll send you a login link — no password needed.</p>
-        {error && <div className="error-box">{error}</div>}
-        <div className="field">
-          <label htmlFor="email">Email</label>
+    <AuthShell as="form" onSubmit={handleSubmit}>
+      <h1>MediaCom Portal</h1>
+      <p>Enter your email and we'll send you a login link — no password needed.</p>
+      {error && (
+        <div className="auth-dark-error" role="alert">
+          <AlertCircleIcon width={16} height={16} />
+          <span>{error}</span>
+        </div>
+      )}
+      <div className="auth-dark-field">
+        <label htmlFor="email">Email</label>
+        <div className="auth-dark-input">
+          <MailIcon width={16} height={16} />
           <input
-            id="email" type="email" required autoFocus
+            id="email" type="email" required autoFocus autoComplete="email"
+            placeholder="you@studio.com"
             value={email} onChange={(e) => setEmail(e.target.value)}
           />
         </div>
-        <button type="submit" className="primary" disabled={busy} style={{ width: "100%" }}>
-          {busy ? "Sending…" : "Send login link"}
-        </button>
-      </form>
-    </div>
+      </div>
+      <button type="submit" className="auth-dark-button" disabled={busy}>
+        {busy ? "Sending…" : <>Send login link <ArrowRightIcon width={16} height={16} /></>}
+      </button>
+    </AuthShell>
   );
 }

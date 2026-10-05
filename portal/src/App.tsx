@@ -5,7 +5,6 @@ import { Layout } from "./components/Layout";
 import { LoginPage } from "./pages/LoginPage";
 import { VerifyPage } from "./pages/VerifyPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { DownloadsPage } from "./pages/DownloadsPage";
 
 export default function App() {
   return (
@@ -17,7 +16,6 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/" element={<DashboardPage />} />
-              <Route path="/downloads" element={<DownloadsPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

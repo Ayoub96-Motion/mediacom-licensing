@@ -4,13 +4,7 @@ import { requestMagicLink } from "../api/auth";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import type { PortalDevice, PortalLicense } from "../types";
-
-function summarizeFeatures(f: PortalLicense["features"]): string {
-  const parts = [`${f.maxUsers} users`, `${f.maxLocations} location${f.maxLocations === 1 ? "" : "s"}`];
-  if (f.guestAccess) parts.push("guest access");
-  if (f.whiteLabel) parts.push("white label");
-  return parts.join(" · ");
-}
+import { UsersIcon, MapPinIcon, DeviceIcon } from "./Icons";
 
 export function LicenseCard({ license }: { license: PortalLicense }) {
   const { customer } = useAuth();
@@ -103,8 +97,37 @@ export function LicenseCard({ license }: { license: PortalLicense }) {
       </div>
 
       <div className="license-card-body">
-        <div className="muted">{summarizeFeatures(license.features)}</div>
-        <div className="muted">Devices: {license.activeDeviceCount}/{license.deviceLimit}</div>
+        <div className="stat-block-row">
+          <div className="stat-block">
+            <span className="stat-icon-badge stat-icon-badge-lime">
+              <UsersIcon />
+            </span>
+            <div>
+              <div className="stat-value">{license.features.maxUsers}</div>
+              <div className="stat-label">users</div>
+            </div>
+          </div>
+          <div className="stat-block">
+            <span className="stat-icon-badge stat-icon-badge-lime">
+              <MapPinIcon />
+            </span>
+            <div>
+              <div className="stat-value">{license.features.maxLocations}</div>
+              <div className="stat-label">location{license.features.maxLocations === 1 ? "" : "s"}</div>
+            </div>
+          </div>
+          <div className="stat-block">
+            <span className="stat-icon-badge stat-icon-badge-neutral">
+              <DeviceIcon />
+            </span>
+            <div>
+              <div className="stat-value">
+                {license.activeDeviceCount}<span className="stat-value-sub">/{license.deviceLimit}</span>
+              </div>
+              <div className="stat-label">devices</div>
+            </div>
+          </div>
+        </div>
 
         <div className="key-box">
           {rawKey ? (
@@ -137,7 +160,8 @@ export function LicenseCard({ license }: { license: PortalLicense }) {
           </div>
         )}
 
-        <button type="button" className="link" onClick={toggleDevices}>
+        <button type="button" className="link manage-devices-link" onClick={toggleDevices}>
+          <DeviceIcon width={14} height={14} />
           {devicesOpen ? "Hide devices" : "Manage devices"}
         </button>
 

@@ -1,5 +1,6 @@
 import { useAuth } from "../context/AuthContext";
 import { LicenseCard } from "../components/LicenseCard";
+import { DownloadsSection } from "../components/DownloadsSection";
 import { EmptyState } from "../components/StateViews";
 
 export function DashboardPage() {
@@ -7,10 +8,11 @@ export function DashboardPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <h2>My Licenses</h2>
+      <div className="dashboard-intro">
+        <div className="dashboard-eyebrow">Dashboard</div>
+        <h1>Welcome back{customer ? `, ${customer.name}` : ""}</h1>
+        <p className="muted">Manage your license, devices, and app downloads.</p>
       </div>
-      {customer && <p className="muted">Signed in as {customer.name} ({customer.email})</p>}
 
       {licenses.length === 0 && <EmptyState label="No licenses on your account yet. Contact support if you believe this is a mistake." />}
 
@@ -19,6 +21,8 @@ export function DashboardPage() {
           <LicenseCard key={lic.id} license={lic} />
         ))}
       </div>
+
+      <DownloadsSection />
     </div>
   );
 }

@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { verifyMagicLink } from "../api/auth";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { AlertCircleIcon, ArrowRightIcon } from "../components/Icons";
+import { AuthShell } from "../components/AuthShell";
 
 // Deliberately does NOT verify on mount (no useEffect calling the API here).
 // Two reasons:
@@ -43,30 +45,25 @@ export function VerifyPage() {
   }
 
   return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        {!token ? (
-          <>
-            <h1>Login link didn't work</h1>
-            <div className="error-box">Missing login token.</div>
-            <Link to="/login" className="link">Request a new login link</Link>
-          </>
-        ) : error ? (
-          <>
-            <h1>Login link didn't work</h1>
-            <div className="error-box">{error}</div>
-            <Link to="/login" className="link">Request a new login link</Link>
-          </>
-        ) : (
-          <>
-            <h1>MediaCom Portal</h1>
-            <p className="muted">Click below to finish logging in.</p>
-            <button type="button" className="primary" style={{ width: "100%" }} onClick={handleLogin} disabled={verifying}>
-              {verifying ? "Logging in…" : "Log in to MediaCom"}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+    <AuthShell>
+      {!token || error ? (
+        <>
+          <h1>Login link didn't work</h1>
+          <div className="auth-dark-error" role="alert">
+            <AlertCircleIcon width={16} height={16} />
+            <span>{error ?? "Missing login token."}</span>
+          </div>
+          <Link to="/login" className="auth-dark-link">Request a new login link</Link>
+        </>
+      ) : (
+        <>
+          <h1>MediaCom Portal</h1>
+          <p>Click below to finish logging in.</p>
+          <button type="button" className="auth-dark-button" onClick={handleLogin} disabled={verifying}>
+            {verifying ? "Logging in…" : <>Log in to MediaCom <ArrowRightIcon width={16} height={16} /></>}
+          </button>
+        </>
+      )}
+    </AuthShell>
   );
 }
