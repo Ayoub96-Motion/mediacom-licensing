@@ -445,6 +445,51 @@ section[id] { scroll-margin-top: calc(var(--nav-height) + 8px); }
   .footer-inner { flex-direction: column; }
 }
 
+/* ── Loading splash (port of the MediaCom Desktop loading screen) ──────── */
+html.splash-active, html.splash-active body { overflow: hidden; }
+.splash {
+  position: fixed; inset: 0; z-index: 1000;
+  background: #14171f;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  opacity: 1;
+  transition: opacity 450ms ease-out;
+}
+.splash.is-leaving { opacity: 0; pointer-events: none; }
+.splash-logo-wrap { position: relative; width: 64px; height: 64px; margin-bottom: 28px; }
+/* Breathing glow — pre-softened radial gradient (no filter: blur), as on desktop. */
+.splash-logo-wrap::before {
+  content: ""; position: absolute; inset: -40px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(163, 230, 53, 0.45) 0%, rgba(132, 204, 22, 0.12) 45%, transparent 70%);
+  opacity: 0.4;
+  animation: splash-glow 2s ease-in-out infinite;
+}
+.splash-logo {
+  position: relative;
+  width: 64px; height: 64px; border-radius: 16px;
+  background: var(--gradient-lime); color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  font: 800 28px/1 var(--font-mono);
+  box-shadow: 0 10px 30px rgba(132, 204, 22, 0.35);
+  animation: splash-breathe 2s ease-in-out infinite;
+}
+@keyframes splash-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+@keyframes splash-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+/* Same bars/keyframes as the hero waveform (wavepulse above). */
+.splash-wave { display: flex; align-items: center; gap: 4px; height: 32px; margin-bottom: 22px; }
+.splash-wave span {
+  width: 4px; border-radius: 2px; background: var(--lime);
+  transform-origin: center;
+  animation: wavepulse 1.4s ease-in-out infinite;
+}
+.splash-wave span:nth-child(even) { background: var(--lime-bright); }
+.splash-wordmark { font: 800 18px/1 var(--font-mono); letter-spacing: -0.02em; color: #ffffff; }
+
 /* ── Reduced motion ──────────────────────────────────────────────────── */
 /* Drops the blob drift, waveform pulse and scroll-reveal slide (the reveal
    keeps its opacity fade). Parallax is switched off in useHeroParallax. */
@@ -452,4 +497,5 @@ section[id] { scroll-margin-top: calc(var(--nav-height) + 8px); }
   html { scroll-behavior: auto; }
   .blob, .wave-bar { animation: none; }
   .reveal, .reveal[data-revealed] { transform: none; transition: opacity 0.5s ease-out; }
+  .splash-logo, .splash-logo-wrap::before, .splash-wave span { animation: none; }
 }

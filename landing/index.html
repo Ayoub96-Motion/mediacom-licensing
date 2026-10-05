@@ -7,6 +7,12 @@
     <meta name="theme-color" content="#14171F" />
     <title>MediaCom — Push-to-talk intercom for broadcast teams</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- First visit this session: paint the splash's dark background before
+         the JS bundle runs (no white flash). LoadingSplash removes the class. -->
+    <style>html.splash-pending, html.splash-pending body { background: #14171F; }</style>
+    <script>
+      try { if (sessionStorage.getItem("mc_splash_seen") !== "1") document.documentElement.classList.add("splash-pending"); } catch (e) {}
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
